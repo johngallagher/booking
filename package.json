@@ -1,0 +1,17 @@
+{
+  "name": "tennis-booker",
+  "version": "1.0.0",
+  "packageManager": "yarn@4.9.1",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "record": "playwright codegen --target typescript -o src/recorded.ts https://bookings.better.org.uk/location/indoor-tennis-centre-and-ozone-complex/tennis-court-indoor"
+  },
+  "dependencies": {
+    "playwright": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "tsx": "latest",
+    "typescript": "latest"
+  }
+}
