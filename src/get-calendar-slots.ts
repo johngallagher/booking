@@ -1,4 +1,5 @@
 import { google } from "googleapis";
+import type { calendar_v3 } from "googleapis";
 import * as fs from "fs";
 import * as http from "http";
 import * as path from "path";
@@ -20,6 +21,22 @@ export interface CalendarSlot {
 
 function tokenPath(account: string) {
   return path.join(process.cwd(), `token-${account}.json`);
+}
+
+function toLocalDateString(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function overlaps(slot: CalendarSlot, event: calendar_v3.Schema$Event): boolean {
+  if (event.start?.date) {
+    // All-day event: end date is exclusive in the Google Calendar API
+    return slot.date >= event.start.date && slot.date < event.end!.date!;
+  }
+  const slotStart = new Date(`${slot.date}T${slot.startTime}`);
+  const slotEnd = new Date(`${slot.date}T${slot.endTime}`);
+  const eventStart = new Date(event.start!.dateTime!);
+  const eventEnd = new Date(event.end!.dateTime!);
+  return slotStart < eventEnd && slotEnd > eventStart;
 }
 
 async function getNewToken(
@@ -92,22 +109,29 @@ async function getSlotsForAccount(account: string): Promise<CalendarSlot[]> {
     timeMax: twoWeeksLater.toISOString(),
     singleEvents: true,
     orderBy: "startTime",
-    q: "[TBC] Tennis",
   });
 
-  return (response.data.items ?? [])
+  const events = response.data.items ?? [];
+
+  const tennisSlots = events
     .filter((e) => e.summary === "[TBC] Tennis")
     .map((e) => {
       const start = new Date(e.start!.dateTime ?? e.start!.date!);
       const end = new Date(e.end!.dateTime ?? e.end!.date!);
       return {
-        date: start.toISOString().split("T")[0],
+        date: toLocalDateString(start),
         startTime: start.toTimeString().slice(0, 5),
         endTime: end.toTimeString().slice(0, 5),
         recurring: !!e.recurringEventId,
         account,
       };
     });
+
+  const busyEvents = events.filter(
+    (e) => e.summary !== "[TBC] Tennis" && e.transparency !== "transparent"
+  );
+
+  return tennisSlots.filter((slot) => !busyEvents.some((e) => overlaps(slot, e)));
 }
 
 export async function getCalendarSlots(): Promise<CalendarSlot[]> {
@@ -120,7 +144,7 @@ export async function getCalendarSlots(): Promise<CalendarSlot[]> {
 
 async function main() {
   const slots = await getCalendarSlots();
-  console.log(`Found ${slots.length} [TBC] Tennis slot(s) in the next 14 days:`);
+  console.log(`Found ${slots.length} free [TBC] Tennis slot(s) in the next 14 days:`);
   console.log(JSON.stringify(slots, null, 2));
 }
 
