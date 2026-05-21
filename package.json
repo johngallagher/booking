@@ -4,9 +4,11 @@
   "packageManager": "yarn@4.9.1",
   "scripts": {
     "start": "tsx src/index.ts",
+    "calendar": "tsx src/get-calendar-slots.ts",
     "record": "playwright codegen --target typescript -o src/recorded.ts https://bookings.better.org.uk/location/indoor-tennis-centre-and-ozone-complex/tennis-court-indoor"
   },
   "dependencies": {
+    "googleapis": "^172.0.0",
     "playwright": "latest"
   },
   "devDependencies": {
