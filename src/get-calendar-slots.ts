@@ -5,7 +5,7 @@ import * as http from "http";
 import * as path from "path";
 import type { TimeSlot } from "./types";
 
-const SCOPES = ["https://www.googleapis.com/auth/calendar.events"];
+const SCOPES = ["https://www.googleapis.com/auth/calendar"];
 const CREDENTIALS_PATH = path.join(process.cwd(), "credentials.json");
 const REDIRECT_PORT = 3001;
 const REDIRECT_URI = `http://localhost:${REDIRECT_PORT}`;
