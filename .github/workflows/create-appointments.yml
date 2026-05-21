@@ -2,7 +2,8 @@ name: create-appointments
 
 on:
   schedule:
-    - cron: "0 7 * * *"  # every morning at 7am UTC
+    - cron: "*/15 7-23 * * *"   # every 15 min, 7am–midnight UTC
+    - cron: "*/15 0-1 * * *"   # every 15 min, midnight–2am UTC
   workflow_dispatch: {}
 
 jobs:
