@@ -3,6 +3,7 @@ import type { calendar_v3 } from "googleapis";
 import * as fs from "fs";
 import * as http from "http";
 import * as path from "path";
+import type { TimeSlot } from "./types";
 
 const SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"];
 const CREDENTIALS_PATH = path.join(process.cwd(), "credentials.json");
@@ -11,10 +12,7 @@ const REDIRECT_URI = `http://localhost:${REDIRECT_PORT}`;
 
 const ACCOUNTS = ["kingofkerning@gmail.com", "john@synapticmishap.co.uk"];
 
-export interface CalendarSlot {
-  date: string;
-  startTime: string;
-  endTime: string;
+export interface PlannedTennisSlot extends TimeSlot {
   recurring: boolean;
   account: string;
 }
@@ -27,7 +25,7 @@ function toLocalDateString(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-function overlaps(slot: CalendarSlot, event: calendar_v3.Schema$Event): boolean {
+function overlaps(slot: PlannedTennisSlot, event: calendar_v3.Schema$Event): boolean {
   if (event.start?.date) {
     // All-day event: end date is exclusive in the Google Calendar API
     return slot.date >= event.start.date && slot.date < event.end!.date!;
@@ -95,7 +93,7 @@ async function authorize(account: string) {
   return oAuth2Client;
 }
 
-async function getSlotsForAccount(account: string): Promise<CalendarSlot[]> {
+async function getSlotsForAccount(account: string): Promise<PlannedTennisSlot[]> {
   const auth = await authorize(account);
   const calendar = google.calendar({ version: "v3", auth });
 
@@ -134,8 +132,8 @@ async function getSlotsForAccount(account: string): Promise<CalendarSlot[]> {
   return tennisSlots.filter((slot) => !busyEvents.some((e) => overlaps(slot, e)));
 }
 
-export async function getCalendarSlots(): Promise<CalendarSlot[]> {
-  const results: CalendarSlot[] = [];
+export async function getPlannedTennisSlots(): Promise<PlannedTennisSlot[]> {
+  const results: PlannedTennisSlot[] = [];
   for (const account of ACCOUNTS) {
     results.push(...await getSlotsForAccount(account));
   }
@@ -143,7 +141,7 @@ export async function getCalendarSlots(): Promise<CalendarSlot[]> {
 }
 
 async function main() {
-  const slots = await getCalendarSlots();
+  const slots = await getPlannedTennisSlots();
   console.log(`Found ${slots.length} free [TBC] Tennis slot(s) in the next 14 days:`);
   console.log(JSON.stringify(slots, null, 2));
 }

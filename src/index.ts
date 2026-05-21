@@ -1,15 +1,19 @@
 import { chromium, type Page } from "playwright";
+import type { TimeSlot } from "./types";
+
+export { TimeSlot };
 
 const BASE_URL =
   "https://bookings.better.org.uk/location/indoor-tennis-centre-and-ozone-complex/tennis-court-indoor";
 
-interface Slot {
-  date: string;
-  startTime: string;
-  endTime: string;
+export interface AvailableCourt extends TimeSlot {
   spaces: number;
   price: string;
   bookingUrl: string;
+}
+
+function toLocalDateString(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 async function dismissCookies(page: Page) {
@@ -17,18 +21,18 @@ async function dismissCookies(page: Page) {
   await btn.click();
 }
 
-async function getAllSlots(page: Page): Promise<Slot[]> {
+export async function getAllSlots(page: Page): Promise<AvailableCourt[]> {
   const today = new Date();
-  const allSlots: Slot[] = [];
+  const allSlots: AvailableCourt[] = [];
 
-  const firstDate = today.toISOString().split("T")[0];
+  const firstDate = toLocalDateString(today);
   await page.goto(`${BASE_URL}/${firstDate}/by-time`, { waitUntil: "domcontentloaded" });
   await dismissCookies(page);
 
   for (let i = 0; i < 7; i++) {
     const d = new Date(today);
     d.setDate(today.getDate() + i);
-    const date = d.toISOString().split("T")[0];
+    const date = toLocalDateString(d);
 
     await page.goto(`${BASE_URL}/${date}/by-time`, { waitUntil: "domcontentloaded" });
 
