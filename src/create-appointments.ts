@@ -70,8 +70,9 @@ async function main() {
   const availableCourts = await getAllSlots(page);
   await browser.close();
 
-  const eveningAndWeekendCourts = availableCourts.filter(isEveningOrWeekend);
-  console.log(`${eveningAndWeekendCourts.length} evening/weekend court(s) found`);
+  // const eveningAndWeekendCourts = availableCourts.filter(isEveningOrWeekend);
+  const eveningAndWeekendCourts = availableCourts; // TODO: restore filter above for production
+  console.log(`${eveningAndWeekendCourts.length} court(s) found`);
 
   const auth = await authorize(KING_ACCOUNT);
   const calendar = google.calendar({ version: "v3", auth });
