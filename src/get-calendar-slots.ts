@@ -146,4 +146,4 @@ async function main() {
   console.log(JSON.stringify(slots, null, 2));
 }
 
-main().catch(console.error);
+if (require.main === module) main().catch(console.error);

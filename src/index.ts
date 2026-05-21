@@ -89,4 +89,4 @@ async function main() {
   await browser.close();
 }
 
-main().catch(console.error);
+if (require.main === module) main().catch(console.error);
