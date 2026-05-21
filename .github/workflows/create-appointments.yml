@@ -1,0 +1,33 @@
+name: create-appointments
+
+on:
+  schedule:
+    - cron: "0 7 * * *"  # every morning at 7am UTC
+  workflow_dispatch: {}
+
+jobs:
+  create:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: yarn install
+
+      - name: Install Playwright browsers
+        run: yarn playwright install chromium --with-deps
+
+      - name: Write Google credentials
+        env:
+          CALENDAR_CREDENTIALS_JSON: ${{ secrets.CALENDAR_CREDENTIALS_JSON }}
+          CALENDAR_TOKEN_JSON: ${{ secrets.CALENDAR_TOKEN_KINGOFKERNING_JSON }}
+        run: |
+          echo "$CALENDAR_CREDENTIALS_JSON" > credentials.json
+          echo "$CALENDAR_TOKEN_JSON" > "token-kingofkerning@gmail.com.json"
+
+      - name: Create Indoor Tennis appointments
+        run: yarn appointments
