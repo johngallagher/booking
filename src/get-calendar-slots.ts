@@ -5,7 +5,7 @@ import * as http from "http";
 import * as path from "path";
 import type { TimeSlot } from "./types";
 
-const SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"];
+const SCOPES = ["https://www.googleapis.com/auth/calendar.events"];
 const CREDENTIALS_PATH = path.join(process.cwd(), "credentials.json");
 const REDIRECT_PORT = 3001;
 const REDIRECT_URI = `http://localhost:${REDIRECT_PORT}`;
@@ -78,7 +78,7 @@ async function getNewToken(
   console.log(`Token saved for ${account}`);
 }
 
-async function authorize(account: string) {
+export async function authorize(account: string) {
   const credentials = JSON.parse(fs.readFileSync(CREDENTIALS_PATH, "utf8"));
   const { client_id, client_secret } = credentials.installed ?? credentials.web;
   const oAuth2Client = new google.auth.OAuth2(client_id, client_secret, REDIRECT_URI);

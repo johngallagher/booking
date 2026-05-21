@@ -1,0 +1,38 @@
+name: book-tennis
+
+on:
+  workflow_dispatch:
+    inputs:
+      booking_url:
+        description: "The better.org.uk booking URL to complete"
+        required: true
+        type: string
+      dry_run:
+        description: "Navigate to payment screen but do not submit"
+        type: boolean
+        default: false
+
+jobs:
+  book:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: yarn install
+
+      - name: Install Playwright browsers
+        run: yarn playwright install chromium --with-deps
+
+      - name: Book the court
+        env:
+          BOOKING_URL: ${{ inputs.booking_url }}
+          BETTER_EMAIL: ${{ secrets.BETTER_EMAIL }}
+          BETTER_PASSWORD: ${{ secrets.BETTER_PASSWORD }}
+          CARD_CVC: ${{ secrets.CARD_CVC }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: yarn tsx src/book-court.ts
