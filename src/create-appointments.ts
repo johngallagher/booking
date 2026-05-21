@@ -1,4 +1,5 @@
 import { google } from "googleapis";
+import type { calendar_v3 } from "googleapis";
 import { chromium } from "playwright";
 import { authorize } from "./get-calendar-slots";
 import { getAllSlots, type AvailableCourt } from "./index";
@@ -14,6 +15,10 @@ function isEveningOrWeekend(court: AvailableCourt): boolean {
   return dow === 0 || dow === 6;
 }
 
+function courtMatchesEvent(court: AvailableCourt, event: calendar_v3.Schema$Event): boolean {
+  return !!event.start?.dateTime?.startsWith(`${court.date}T${court.startTime}`);
+}
+
 async function getExerciseCalendarId(
   calendar: ReturnType<typeof google.calendar>
 ): Promise<string> {
@@ -23,11 +28,11 @@ async function getExerciseCalendarId(
   return cal.id;
 }
 
-async function getExistingEventStartTimes(
+async function getExistingIndoorTennisEvents(
   calendar: ReturnType<typeof google.calendar>,
   calendarId: string,
   lookaheadDays: number
-): Promise<Set<string>> {
+): Promise<calendar_v3.Schema$Event[]> {
   const now = new Date();
   const later = new Date(now);
   later.setDate(now.getDate() + lookaheadDays);
@@ -39,11 +44,7 @@ async function getExistingEventStartTimes(
     singleEvents: true,
   });
 
-  const starts = new Set<string>();
-  for (const e of res.data.items ?? []) {
-    if (e.start?.dateTime) starts.add(e.start.dateTime);
-  }
-  return starts;
+  return (res.data.items ?? []).filter((e) => e.summary === "Indoor Tennis");
 }
 
 async function createIndoorTennisEvent(
@@ -70,37 +71,39 @@ async function main() {
   const availableCourts = await getAllSlots(page);
   await browser.close();
 
-  // const eveningAndWeekendCourts = availableCourts.filter(isEveningOrWeekend);
-  const eveningAndWeekendCourts = availableCourts; // TODO: restore filter above for production
-  console.log(`${eveningAndWeekendCourts.length} court(s) found`);
+  const filteredCourts = availableCourts.filter(isEveningOrWeekend);
+  console.log(`${filteredCourts.length} evening/weekend court(s) found`);
 
   const auth = await authorize(KING_ACCOUNT);
   const calendar = google.calendar({ version: "v3", auth });
   const calendarId = await getExerciseCalendarId(calendar);
-  const existingStarts = await getExistingEventStartTimes(calendar, calendarId, 7);
+  const existingEvents = await getExistingIndoorTennisEvents(calendar, calendarId, 7);
 
+  // Delete events that are no longer in the available courts list (skip already-booked ones)
+  let deleted = 0;
+  for (const event of existingEvents) {
+    if (event.description?.startsWith("BOOKED")) continue;
+    if (!filteredCourts.some((court) => courtMatchesEvent(court, event))) {
+      await calendar.events.delete({ calendarId, eventId: event.id!, sendUpdates: "all" });
+      console.log(`Deleted: ${event.start?.dateTime} (no longer available)`);
+      deleted++;
+    }
+  }
+
+  // Create events for courts not already in the calendar
   let created = 0;
   let skipped = 0;
-
-  for (const court of eveningAndWeekendCourts) {
-    const startDateTime = `${court.date}T${court.startTime}:00+01:00`;
-    const startDateTimeUtc = `${court.date}T${court.startTime}:00Z`;
-
-    const alreadyExists =
-      existingStarts.has(startDateTime) || existingStarts.has(startDateTimeUtc) ||
-      [...existingStarts].some((s) => s.startsWith(`${court.date}T${court.startTime}`));
-
-    if (alreadyExists) {
+  for (const court of filteredCourts) {
+    if (existingEvents.some((event) => courtMatchesEvent(court, event))) {
       skipped++;
       continue;
     }
-
     await createIndoorTennisEvent(calendar, calendarId, court);
     console.log(`Created: ${court.date} ${court.startTime}–${court.endTime} (${court.price})`);
     created++;
   }
 
-  console.log(`\nDone: ${created} created, ${skipped} already existed`);
+  console.log(`\nDone: ${created} created, ${skipped} already existed, ${deleted} deleted`);
 }
 
-main().catch(console.error);
+if (require.main === module) main().catch(console.error);
