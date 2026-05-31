@@ -1,4 +1,4 @@
-name: sync-gym-calendar
+name: calendar.tennis.sync
 
 on:
   schedule:
@@ -45,19 +45,5 @@ jobs:
           echo "$CALENDAR_CREDENTIALS_JSON" > credentials.json
           echo "$CALENDAR_TOKEN_JSON" > "token-kingofkerning@gmail.com.json"
 
-      - name: Create TeamUp gym appointments
-        env:
-          TEAMUP_EMAIL: ${{ secrets.TEAMUP_EMAIL }}
-          TEAMUP_PASSWORD: ${{ secrets.TEAMUP_PASSWORD }}
-          TEAMUP_DEBUG: ${{ github.event_name == 'workflow_dispatch' && 'true' || '' }}
-        run: yarn teamup
-
-      - name: Upload debug screenshots
-        if: github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@v4
-        with:
-          name: teamup-debug-screenshots
-          path: |
-            teamup-debug-*.png
-            teamup-debug-*.html
-          if-no-files-found: ignore
+      - name: Create Indoor Tennis appointments
+        run: yarn appointments
