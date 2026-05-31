@@ -48,9 +48,15 @@ async function getBusyPeriods(
   to: Date
 ): Promise<Array<{ start: Date; end: Date }>> {
   const calList = await calendar.calendarList.list();
-  const items = (calList.data.items ?? [])
+  const allCals = calList.data.items ?? [];
+  const items = allCals
     .filter((c) => c.id !== excludeCalendarId)
     .map((c) => ({ id: c.id! }));
+
+  console.log(`Checking FreeBusy across ${items.length} calendar(s) (excluding Exercise):`);
+  allCals.forEach((c) =>
+    console.log(`  ${c.id === excludeCalendarId ? "[excluded]" : "[included]"} ${c.summary} (${c.id})`)
+  );
 
   if (items.length === 0) return [];
 
@@ -58,9 +64,18 @@ async function getBusyPeriods(
     requestBody: { timeMin: from.toISOString(), timeMax: to.toISOString(), items },
   });
 
-  return Object.values(res.data.calendars ?? {}).flatMap(
+  const periods = Object.values(res.data.calendars ?? {}).flatMap(
     (cal) => (cal.busy ?? []).map((b) => ({ start: new Date(b.start!), end: new Date(b.end!) }))
   );
+
+  if (periods.length > 0) {
+    console.log(`${periods.length} busy period(s) found:`);
+    periods.forEach((p) => console.log(`  ${p.start.toISOString()} – ${p.end.toISOString()}`));
+  } else {
+    console.log("No busy periods found.");
+  }
+
+  return periods;
 }
 
 function conflictsWithBusy(
@@ -69,7 +84,13 @@ function conflictsWithBusy(
 ): boolean {
   const start = sessionToDate(session, "startTime");
   const end = sessionToDate(session, "endTime");
-  return busyPeriods.some((b) => start < b.end && end > b.start);
+  const conflict = busyPeriods.find((b) => start < b.end && end > b.start);
+  if (conflict) {
+    console.log(
+      `  → blocked by: ${conflict.start.toISOString()} – ${conflict.end.toISOString()}`
+    );
+  }
+  return !!conflict;
 }
 
 // ── Calendar helpers ──────────────────────────────────────────────────────────
