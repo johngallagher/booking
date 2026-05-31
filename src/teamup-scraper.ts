@@ -23,16 +23,21 @@ function toLocalDateString(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-// Normalise "9:00am" or "09:00" to "09:00"
-function parseTime(raw: string): string {
-  const m = raw.trim().match(/^(\d{1,2}):(\d{2})(am|pm)?$/i);
-  if (!m) return raw.trim();
-  let h = parseInt(m[1], 10);
-  const min = m[2];
-  const meridiem = m[3]?.toLowerCase();
-  if (meridiem === "pm" && h < 12) h += 12;
-  if (meridiem === "am" && h === 12) h = 0;
-  return `${String(h).padStart(2, "0")}:${min}`;
+function addHour(time: string): string {
+  const [h, m] = time.split(":").map(Number);
+  const newH = (h + 1) % 24;
+  return `${String(newH).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+function parseSpots(text: string): number {
+  // "Full 12/12" → 0, "11/12" → 1, "7" → 7, "0/1" → 0
+  const full = text.match(/full/i);
+  if (full) return 0;
+  const fraction = text.match(/(\d+)\/(\d+)/);
+  if (fraction) return parseInt(fraction[2], 10) - parseInt(fraction[1], 10);
+  const simple = text.match(/(\d+)/);
+  if (simple) return parseInt(simple[1], 10);
+  return 1;
 }
 
 async function login(page: Page, email: string, password: string): Promise<void> {
@@ -42,106 +47,23 @@ async function login(page: Page, email: string, password: string): Promise<void>
   // Step 1: email
   await page.fill('input[type="email"]', email);
   await Promise.race([
-    page.click('button:has-text("Next")'),
-    page.click('button[type="submit"]'),
-  ]).catch(() => page.keyboard.press("Enter"));
+    page.click('button:has-text("Next")').catch(() => {}),
+    page.click('button[type="submit"]').catch(() => {}),
+  ]);
 
-  // Step 2: password (some flows show it on the same page, others reveal it)
-  await page.waitForSelector('input[type="password"]', { timeout: 10000 });
+  // Step 2: password (may appear on same page or after transition)
+  try {
+    await page.waitForSelector('input[type="password"]', { timeout: 10000 });
+  } catch {
+    // Already on password screen
+  }
   await page.fill('input[type="password"]', password);
-  await page.click('button[type="submit"]').catch(() => page.keyboard.press("Enter"));
+  await page.keyboard.press("Enter");
 
   await page.waitForFunction(() => !window.location.href.includes("/login"), {
     timeout: 15000,
   });
   console.log("Logged in to TeamUp");
-}
-
-async function parseSessionsForDay(page: Page, date: string): Promise<GymSession[]> {
-  const url = `${SCHEDULE_BASE}?startdate=${date}&enddate=${date}&date=${date}`;
-  await page.goto(url, { waitUntil: "domcontentloaded" });
-  await page.waitForLoadState("networkidle");
-
-  // Wait for session content or empty-state indicator
-  await page
-    .waitForSelector(
-      [
-        ".class-listing__item",
-        ".classlist li",
-        ".class-item",
-        '[class*="ClassList"] li',
-        "li.cs-class",
-        '[class*="class-listing"]',
-        '[class*="no-classes"]',
-        '[class*="no-results"]',
-        ".empty",
-      ].join(", "),
-      { timeout: 8000 }
-    )
-    .catch(() => {});
-
-  if (process.env.TEAMUP_DEBUG) {
-    const html = await page.content();
-    fs.writeFileSync(`teamup-debug-${date}.html`, html);
-    await page.screenshot({ path: `teamup-debug-${date}.png`, fullPage: true });
-    console.log(`Debug files saved for ${date}`);
-  }
-
-  return page.evaluate((date: string) => {
-    const SELECTORS = [
-      ".class-listing__item",
-      ".classlist li",
-      ".class-item",
-      "li.cs-class",
-      '[class*="ClassList"] li',
-      '[class*="class-listing-item"]',
-    ];
-
-    let items: Element[] = [];
-    for (const sel of SELECTORS) {
-      items = Array.from(document.querySelectorAll(sel));
-      if (items.length > 0) break;
-    }
-
-    if (items.length === 0) return [];
-
-    return items.flatMap((item) => {
-      const nameEl = item.querySelector(
-        '.classname, .class-name, [class*="class-name"], [class*="classname"], h3, h4, strong'
-      );
-      const name = nameEl?.textContent?.trim() ?? "";
-      if (!name) return [];
-
-      const timeEl = item.querySelector(
-        '.time, [class*="time"], [class*="schedule-time"], [class*="class-time"], time'
-      );
-      const timeText = timeEl?.textContent?.trim() ?? "";
-      const timeMatch = timeText.match(
-        /(\d{1,2}:\d{2}(?:\s?[ap]m)?)\s*[-–]\s*(\d{1,2}:\d{2}(?:\s?[ap]m)?)/i
-      );
-      const startRaw = timeMatch?.[1] ?? "";
-      const endRaw = timeMatch?.[2] ?? "";
-
-      const spotsEl = item.querySelector(
-        '[class*="spot"], [class*="space"], [class*="avail"], [class*="capacity"]'
-      );
-      const spotsText = spotsEl?.textContent ?? "";
-      const spotsMatch = spotsText.match(/(\d+)/);
-      const spotsAvailable = spotsMatch ? parseInt(spotsMatch[1], 10) : 1;
-
-      return [{ name, date, startRaw, endRaw, spotsAvailable }];
-    });
-  }, date).then((raw) =>
-    raw
-      .filter((s) => s.startRaw)
-      .map((s) => ({
-        name: s.name,
-        date: s.date,
-        startTime: parseTime(s.startRaw),
-        endTime: parseTime(s.endRaw),
-        spotsAvailable: s.spotsAvailable,
-      }))
-  );
 }
 
 export async function getAllSessions(page: Page): Promise<GymSession[]> {
@@ -152,20 +74,65 @@ export async function getAllSessions(page: Page): Promise<GymSession[]> {
   await login(page, email, password);
 
   const today = new Date();
-  const allSessions: GymSession[] = [];
+  const endD = new Date(today);
+  endD.setDate(today.getDate() + 6);
+  const startStr = toLocalDateString(today);
+  const endStr = toLocalDateString(endD);
 
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(today);
-    d.setDate(today.getDate() + i);
-    const date = toLocalDateString(d);
+  // One load covers the full 7-day window
+  const url = `${SCHEDULE_BASE}?startdate=${startStr}&enddate=${endStr}&date=${startStr}`;
+  await page.goto(url, { waitUntil: "domcontentloaded" });
+  await page.waitForLoadState("networkidle");
 
-    const sessions = await parseSessionsForDay(page, date);
-    const filtered = sessions.filter((s) => !isExcluded(s.name));
-    console.log(`${date}: ${sessions.length} session(s), ${filtered.length} after filter`);
-    allSessions.push(...filtered);
+  // Wait for schedule items to appear
+  await page
+    .waitForSelector(".schedule-event-container", { timeout: 10000 })
+    .catch(() => {});
+
+  if (process.env.TEAMUP_DEBUG) {
+    await page.screenshot({ path: `teamup-debug-${startStr}.png`, fullPage: true });
+    fs.writeFileSync(`teamup-debug-${startStr}.html`, await page.content());
+    console.log(`Debug files saved for ${startStr}`);
   }
 
-  return allSessions;
+  const raw = await page.evaluate(() => {
+    const containers = Array.from(document.querySelectorAll(".schedule-event-container"));
+
+    return containers.flatMap((container) => {
+      // The <time> element is the direct previous sibling
+      const timeEl = container.previousElementSibling as HTMLElement | null;
+      if (timeEl?.tagName !== "TIME") return [];
+
+      const datetime = timeEl.getAttribute("datetime") ?? "";
+      // datetime = "2026-06-01T05:00:00"
+      const [datePart, timePart] = datetime.split("T");
+      if (!datePart || !timePart) return [];
+      const startTime = timePart.slice(0, 5); // "05:00"
+
+      const titleEl = container.querySelector(".eventitem-name h6, h6.title");
+      const name = (titleEl?.textContent ?? "").replace(/<!---->/g, "").trim();
+      if (!name) return [];
+
+      // Spaces: find element containing the user icon text
+      const spotsEl = container.querySelector(".i-fas-user")?.closest("p");
+      const spotsText = (spotsEl?.textContent ?? "").trim();
+
+      return [{ name, date: datePart, startTime, spotsText }];
+    });
+  });
+
+  const sessions: GymSession[] = raw.map((s) => ({
+    name: s.name,
+    date: s.date,
+    startTime: s.startTime,
+    endTime: addHour(s.startTime),
+    spotsAvailable: parseSpots(s.spotsText),
+  }));
+
+  const before = sessions.length;
+  const filtered = sessions.filter((s) => !isExcluded(s.name) && s.spotsAvailable > 0);
+  console.log(`${before} raw session(s), ${filtered.length} after filtering excluded/full`);
+  return filtered;
 }
 
 async function main() {
