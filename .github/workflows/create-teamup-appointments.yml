@@ -1,0 +1,60 @@
+name: create-teamup-appointments
+
+on:
+  schedule:
+    - cron: "*/15 7-23 * * *"   # every 15 min, 7am–midnight UTC
+    - cron: "*/15 0-1 * * *"   # every 15 min, midnight–2am UTC
+  workflow_dispatch: {}
+
+jobs:
+  create:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: yarn install
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ hashFiles('yarn.lock') }}
+
+      - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: yarn playwright install chromium --with-deps
+
+      - name: Install Playwright system dependencies
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: yarn playwright install-deps chromium
+
+      - name: Write Google credentials
+        env:
+          CALENDAR_CREDENTIALS_JSON: ${{ secrets.CALENDAR_CREDENTIALS_JSON }}
+          CALENDAR_TOKEN_JSON: ${{ secrets.CALENDAR_TOKEN_KINGOFKERNING_JSON }}
+        run: |
+          echo "$CALENDAR_CREDENTIALS_JSON" > credentials.json
+          echo "$CALENDAR_TOKEN_JSON" > "token-kingofkerning@gmail.com.json"
+
+      - name: Create TeamUp gym appointments
+        env:
+          TEAMUP_EMAIL: ${{ secrets.TEAMUP_EMAIL }}
+          TEAMUP_PASSWORD: ${{ secrets.TEAMUP_PASSWORD }}
+        run: yarn teamup
+
+      - name: Upload debug screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: teamup-debug-screenshots
+          path: teamup-debug-*.png
+          if-no-files-found: ignore
