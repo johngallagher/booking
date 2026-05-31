@@ -59,7 +59,7 @@ async function markEventAsBooked(
 
 async function triggerBookingWorkflow(bookingUrl: string): Promise<void> {
   const res = await fetch(
-    `https://api.github.com/repos/${GITHUB_REPO}/actions/workflows/book-tennis.yml/dispatches`,
+    `https://api.github.com/repos/${GITHUB_REPO}/actions/workflows/book-tennis-court.yml/dispatches`,
     {
       method: "POST",
       headers: {
@@ -95,7 +95,7 @@ async function main() {
     console.log(`Marked as BOOKED: ${event.start?.dateTime}`);
 
     await triggerBookingWorkflow(bookingUrl);
-    console.log(`Dispatched book-tennis workflow for: ${bookingUrl}`);
+    console.log(`Dispatched book-tennis-court workflow for: ${bookingUrl}`);
   }
 }
 

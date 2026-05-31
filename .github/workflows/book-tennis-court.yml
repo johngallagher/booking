@@ -1,4 +1,4 @@
-name: book-tennis
+name: book-tennis-court
 
 on:
   workflow_dispatch:

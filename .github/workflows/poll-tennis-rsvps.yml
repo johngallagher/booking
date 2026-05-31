@@ -1,4 +1,4 @@
-name: poll-rsvp
+name: poll-tennis-rsvps
 
 on:
   workflow_dispatch: {}

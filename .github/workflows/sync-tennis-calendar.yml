@@ -1,4 +1,4 @@
-name: create-appointments
+name: sync-tennis-calendar
 
 on:
   schedule:

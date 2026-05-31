@@ -1,4 +1,4 @@
-name: create-teamup-appointments
+name: sync-gym-calendar
 
 on:
   schedule:
