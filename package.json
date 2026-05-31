@@ -3,12 +3,9 @@
   "version": "1.0.0",
   "packageManager": "yarn@4.9.1",
   "scripts": {
-    "start": "tsx src/index.ts",
     "calendar": "tsx src/get-calendar-slots.ts",
-    "find": "tsx src/find-available.ts",
     "appointments": "tsx src/create-appointments.ts",
-    "teamup": "tsx src/create-teamup-appointments.ts",
-    "record": "playwright codegen --target typescript -o src/recorded.ts https://bookings.better.org.uk/location/indoor-tennis-centre-and-ozone-complex/tennis-court-indoor"
+    "teamup": "tsx src/create-teamup-appointments.ts"
   },
   "dependencies": {
     "googleapis": "^172.0.0",
