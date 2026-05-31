@@ -43,12 +43,13 @@ function sessionToDate(session: GymSession, field: "startTime" | "endTime"): Dat
 
 async function getBusyPeriods(
   calendar: ReturnType<typeof google.calendar>,
+  excludeCalendarId: string,
   from: Date,
   to: Date
 ): Promise<Array<{ start: Date; end: Date }>> {
   const calList = await calendar.calendarList.list();
   const items = (calList.data.items ?? [])
-    .filter((c) => c.summary !== EXERCISE_CALENDAR)
+    .filter((c) => c.id !== excludeCalendarId)
     .map((c) => ({ id: c.id! }));
 
   if (items.length === 0) return [];
@@ -141,12 +142,13 @@ async function main() {
 
   const auth = await authorize(KING_ACCOUNT);
   const calendar = google.calendar({ version: "v3", auth });
+  const calendarId = await getExerciseCalendarId(calendar);
 
   const now = new Date();
   const lookahead = new Date(now);
   lookahead.setDate(now.getDate() + 7);
 
-  const busyPeriods = await getBusyPeriods(calendar, now, lookahead);
+  const busyPeriods = await getBusyPeriods(calendar, calendarId, now, lookahead);
   const sessions = windowed.filter((s) => {
     if (conflictsWithBusy(s, busyPeriods)) {
       console.log(`Skipped (conflict): ${eventSummary(s)} @ ${s.date} ${s.startTime}–${s.endTime}`);
@@ -155,8 +157,6 @@ async function main() {
     return true;
   });
   console.log(`${sessions.length} session(s) after conflict check`);
-
-  const calendarId = await getExerciseCalendarId(calendar);
   const existingEvents = await getExistingGymEvents(calendar, calendarId, 7);
 
   // Delete stale gym events (no longer available, out of window, or now conflicting)
