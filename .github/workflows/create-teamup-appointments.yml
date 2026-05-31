@@ -49,6 +49,7 @@ jobs:
         env:
           TEAMUP_EMAIL: ${{ secrets.TEAMUP_EMAIL }}
           TEAMUP_PASSWORD: ${{ secrets.TEAMUP_PASSWORD }}
+          TEAMUP_DEBUG: "true"
         run: yarn teamup
 
       - name: Upload debug screenshots
@@ -56,5 +57,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: teamup-debug-screenshots
-          path: teamup-debug-*.png
+          path: |
+            teamup-debug-*.png
+            teamup-debug-*.html
           if-no-files-found: ignore
