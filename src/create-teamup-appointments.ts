@@ -3,10 +3,75 @@ import type { calendar_v3 } from "googleapis";
 import { chromium } from "playwright";
 import { authorize } from "./get-calendar-slots";
 import { getAllSessions, type GymSession } from "./teamup-scraper";
+import { gymSchedule } from "./config";
 
 const KING_ACCOUNT = "kingofkerning@gmail.com";
 const JOHN_ACCOUNT = "john@synapticmishap.co.uk";
 const EXERCISE_CALENDAR = "Exercise";
+
+// ── Time window filter ────────────────────────────────────────────────────────
+
+function isWithinSchedule(session: GymSession): boolean {
+  return (
+    session.endTime <= gymSchedule.morningEndBy ||
+    session.startTime >= gymSchedule.eveningStartFrom
+  );
+}
+
+// ── Timezone-aware date helpers ───────────────────────────────────────────────
+
+function londonOffset(date: string): string {
+  // Returns "+01:00" (BST) or "+00:00" (GMT) for a YYYY-MM-DD date string
+  const d = new Date(`${date}T12:00:00Z`);
+  const tz =
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: "Europe/London",
+      timeZoneName: "shortOffset",
+    })
+      .formatToParts(d)
+      .find((p) => p.type === "timeZoneName")?.value ?? "GMT";
+  const m = tz.match(/GMT([+-])(\d{1,2})/);
+  if (!m) return "+00:00";
+  return `${m[1]}${String(parseInt(m[2])).padStart(2, "0")}:00`;
+}
+
+function sessionToDate(session: GymSession, field: "startTime" | "endTime"): Date {
+  return new Date(`${session.date}T${session[field]}:00${londonOffset(session.date)}`);
+}
+
+// ── Conflict detection (FreeBusy across all calendars except Exercise) ────────
+
+async function getBusyPeriods(
+  calendar: ReturnType<typeof google.calendar>,
+  from: Date,
+  to: Date
+): Promise<Array<{ start: Date; end: Date }>> {
+  const calList = await calendar.calendarList.list();
+  const items = (calList.data.items ?? [])
+    .filter((c) => c.summary !== EXERCISE_CALENDAR)
+    .map((c) => ({ id: c.id! }));
+
+  if (items.length === 0) return [];
+
+  const res = await calendar.freebusy.query({
+    requestBody: { timeMin: from.toISOString(), timeMax: to.toISOString(), items },
+  });
+
+  return Object.values(res.data.calendars ?? {}).flatMap(
+    (cal) => (cal.busy ?? []).map((b) => ({ start: new Date(b.start!), end: new Date(b.end!) }))
+  );
+}
+
+function conflictsWithBusy(
+  session: GymSession,
+  busyPeriods: Array<{ start: Date; end: Date }>
+): boolean {
+  const start = sessionToDate(session, "startTime");
+  const end = sessionToDate(session, "endTime");
+  return busyPeriods.some((b) => start < b.end && end > b.start);
+}
+
+// ── Calendar helpers ──────────────────────────────────────────────────────────
 
 function sessionMatchesEvent(session: GymSession, event: calendar_v3.Schema$Event): boolean {
   return !!event.start?.dateTime?.startsWith(`${session.date}T${session.startTime}`);
@@ -61,25 +126,45 @@ async function createGymEvent(
   });
 }
 
+// ── Main ──────────────────────────────────────────────────────────────────────
+
 async function main() {
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
-  const sessions = await getAllSessions(page);
+  const allSessions = await getAllSessions(page);
   await browser.close();
 
-  console.log(`${sessions.length} TeamUp session(s) found`);
+  console.log(`${allSessions.length} session(s) from TeamUp`);
+
+  const windowed = allSessions.filter(isWithinSchedule);
+  console.log(`${windowed.length} within schedule window (before ${gymSchedule.morningEndBy} or from ${gymSchedule.eveningStartFrom})`);
 
   const auth = await authorize(KING_ACCOUNT);
   const calendar = google.calendar({ version: "v3", auth });
+
+  const now = new Date();
+  const lookahead = new Date(now);
+  lookahead.setDate(now.getDate() + 7);
+
+  const busyPeriods = await getBusyPeriods(calendar, now, lookahead);
+  const sessions = windowed.filter((s) => {
+    if (conflictsWithBusy(s, busyPeriods)) {
+      console.log(`Skipped (conflict): ${eventSummary(s)} @ ${s.date} ${s.startTime}–${s.endTime}`);
+      return false;
+    }
+    return true;
+  });
+  console.log(`${sessions.length} session(s) after conflict check`);
+
   const calendarId = await getExerciseCalendarId(calendar);
   const existingEvents = await getExistingGymEvents(calendar, calendarId, 7);
 
-  // Delete stale gym events no longer in the schedule
+  // Delete stale gym events (no longer available, out of window, or now conflicting)
   let deleted = 0;
   for (const event of existingEvents) {
     if (!sessions.some((s) => sessionMatchesEvent(s, event))) {
       await calendar.events.delete({ calendarId, eventId: event.id!, sendUpdates: "all" });
-      console.log(`Deleted: ${event.summary} @ ${event.start?.dateTime} (no longer available)`);
+      console.log(`Deleted: ${event.summary} @ ${event.start?.dateTime}`);
       deleted++;
     }
   }
