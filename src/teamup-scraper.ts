@@ -113,8 +113,8 @@ export async function getAllSessions(page: Page): Promise<GymSession[]> {
       const name = (titleEl?.textContent ?? "").replace(/<!---->/g, "").trim();
       if (!name) return [];
 
-      // Spaces: find element containing the user icon text
-      const spotsEl = container.querySelector(".i-fas-user")?.closest("p");
+      // Spots: icon class is i-fas-user (available) or i-fas-users (full)
+      const spotsEl = container.querySelector(".i-fas-user, .i-fas-users")?.closest("p");
       const spotsText = (spotsEl?.textContent ?? "").trim();
 
       return [{ name, date: datePart, startTime, spotsText }];
