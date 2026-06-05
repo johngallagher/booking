@@ -5,6 +5,7 @@ import * as path from "path";
 
 const SCOPES = ["https://www.googleapis.com/auth/calendar"];
 const CREDENTIALS_PATH = path.join(process.cwd(), "credentials.json");
+const SERVICE_ACCOUNT_PATH = path.join(process.cwd(), "service-account.json");
 const REDIRECT_PORT = 3001;
 const REDIRECT_URI = `http://localhost:${REDIRECT_PORT}`;
 
@@ -53,7 +54,18 @@ async function getNewToken(
   console.log(`Token saved for ${account}`);
 }
 
-export async function authorize(account: string) {
+export async function authorize(account?: string) {
+  // Service account auth — never expires, no interactive flow needed
+  if (fs.existsSync(SERVICE_ACCOUNT_PATH)) {
+    const auth = new google.auth.GoogleAuth({
+      keyFile: SERVICE_ACCOUNT_PATH,
+      scopes: SCOPES,
+    });
+    return auth.getClient();
+  }
+
+  // Fallback: per-account OAuth2 token (legacy, requires manual refresh)
+  if (!account) throw new Error("No service account found and no account specified for OAuth");
   const credentials = JSON.parse(fs.readFileSync(CREDENTIALS_PATH, "utf8"));
   const { client_id, client_secret } = credentials.installed ?? credentials.web;
   const oAuth2Client = new google.auth.OAuth2(client_id, client_secret, REDIRECT_URI);
