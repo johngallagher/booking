@@ -20,7 +20,7 @@ function isRateLimitError(err: unknown): boolean {
   return false;
 }
 
-export async function withRetry<T>(fn: () => Promise<T>, maxAttempts = 3): Promise<T> {
+export async function withRetry<T>(fn: () => Promise<T>, maxAttempts = 6): Promise<T> {
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
       return await fn();
