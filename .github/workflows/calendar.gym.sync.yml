@@ -41,9 +41,11 @@ jobs:
         env:
           CALENDAR_CREDENTIALS_JSON: ${{ secrets.CALENDAR_CREDENTIALS_JSON }}
           CALENDAR_TOKEN_JSON: ${{ secrets.CALENDAR_TOKEN_KINGOFKERNING_JSON }}
+          CALENDAR_TOKEN_JOHN_JSON: ${{ secrets.CALENDAR_TOKEN_JOHN_JSON }}
         run: |
           echo "$CALENDAR_CREDENTIALS_JSON" > credentials.json
           echo "$CALENDAR_TOKEN_JSON" > "token-kingofkerning@gmail.com.json"
+          [ -n "$CALENDAR_TOKEN_JOHN_JSON" ] && echo "$CALENDAR_TOKEN_JOHN_JSON" > "token-john@synapticmishap.co.uk.json" || true
 
       - name: Create TeamUp gym appointments
         env:
