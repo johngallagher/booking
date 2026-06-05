@@ -6,6 +6,8 @@ function isRateLimitError(err: unknown): boolean {
   const e = err as {
     code?: number;
     status?: number;
+    message?: string;
+    cause?: { message?: string; errors?: Array<{ reason?: string }> };
     response?: {
       status?: number;
       data?: { error?: { errors?: Array<{ reason?: string }> } };
@@ -14,8 +16,13 @@ function isRateLimitError(err: unknown): boolean {
   const status = e.code ?? e.status ?? e.response?.status;
   if (status === 429) return true;
   if (status === 403) {
-    const reasons = e.response?.data?.error?.errors?.map((x) => x.reason) ?? [];
-    return reasons.some((r) => r === "rateLimitExceeded" || r === "userRateLimitExceeded" || r === "calendarUsageLimitsExceeded");
+    const retryable = ["rateLimitExceeded", "userRateLimitExceeded", "calendarUsageLimitsExceeded"];
+    const fromResponse = e.response?.data?.error?.errors?.map((x) => x.reason) ?? [];
+    const fromCause = (e.cause?.errors ?? []).map((x) => x.reason);
+    if ([...fromResponse, ...fromCause].some((r) => retryable.includes(r ?? ""))) return true;
+    // Fallback: match by message string in case errors array is absent
+    const msg = e.message ?? e.cause?.message ?? "";
+    return msg.includes("Calendar usage limits exceeded");
   }
   return false;
 }
