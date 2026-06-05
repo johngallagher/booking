@@ -3,7 +3,15 @@ export const gymSchedule = {
   morningEndBy: "09:00",
   // Include sessions starting at or after this time (evening window)
   eveningStartFrom: "17:00",
-  excludedSessions: ["hyrox", "high rocks", "progress review"],
+  activeMembership: "boxing" as "boxing" | "sgpt",
+  memberships: {
+    boxing: {
+      sessions: ["Smash HIIT", "Bags & Pads", "Boxing Fundamentals", "10 ROUNDS", "BOX-TEC"],
+    },
+    sgpt: {
+      extraSessions: ["SGPT"],
+    },
+  },
 };
 
 export const tennisSchedule = {
