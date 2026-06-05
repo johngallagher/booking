@@ -13,9 +13,17 @@ export interface GymSession {
   spotsAvailable: number;
 }
 
-export function isExcluded(name: string): boolean {
+function allowedSessions(): string[] {
+  const { activeMembership, memberships } = gymSchedule;
+  if (activeMembership === "sgpt") {
+    return [...memberships.boxing.sessions, ...memberships.sgpt.extraSessions];
+  }
+  return memberships.boxing.sessions;
+}
+
+export function isAllowed(name: string): boolean {
   const lower = name.toLowerCase();
-  return gymSchedule.excludedSessions.some((kw) => lower.includes(kw));
+  return allowedSessions().some((s) => s.toLowerCase() === lower);
 }
 
 function toLocalDateString(d: Date): string {
@@ -129,7 +137,7 @@ export async function getAllSessions(page: Page): Promise<GymSession[]> {
   }));
 
   const before = sessions.length;
-  const filtered = sessions.filter((s) => !isExcluded(s.name) && s.spotsAvailable > 0);
+  const filtered = sessions.filter((s) => isAllowed(s.name) && s.spotsAvailable > 0);
   console.log(`${before} raw session(s), ${filtered.length} after filtering excluded/full`);
   return filtered;
 }
