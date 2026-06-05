@@ -132,8 +132,12 @@ async function createGymEvent(
 async function main() {
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
-  const allSessions = await getAllSessions(page);
+  const rawSessions = await getAllSessions(page);
   await browser.close();
+
+  const now = new Date();
+  // TeamUp returns the full week view including past days — discard sessions that have already started
+  const allSessions = rawSessions.filter(s => sessionToDate(s, "startTime") > now);
 
   console.log(`${allSessions.length} session(s) from TeamUp`);
 
@@ -144,7 +148,6 @@ async function main() {
   const calendar = google.calendar({ version: "v3", auth });
   const calendarId = await getExerciseCalendarId(calendar);
 
-  const now = new Date();
   const lookahead = new Date(now);
   lookahead.setDate(now.getDate() + 7);
 
