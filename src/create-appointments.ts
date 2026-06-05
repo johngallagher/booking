@@ -3,6 +3,7 @@ import type { calendar_v3 } from "googleapis";
 import { chromium } from "playwright";
 import { authorize } from "./get-calendar-slots";
 import { getAllSlots, type AvailableCourt } from "./index";
+import { tennisSchedule } from "./config";
 
 const KING_ACCOUNT = "kingofkerning@gmail.com";
 const JOHN_ACCOUNT = "john@synapticmishap.co.uk";
@@ -44,7 +45,7 @@ async function getExistingIndoorTennisEvents(
     singleEvents: true,
   });
 
-  return (res.data.items ?? []).filter((e) => e.summary === "Indoor Tennis");
+  return (res.data.items ?? []).filter((e) => e.summary === tennisSchedule.sessionName);
 }
 
 async function createIndoorTennisEvent(
@@ -56,7 +57,7 @@ async function createIndoorTennisEvent(
     calendarId,
     sendUpdates: "all",
     requestBody: {
-      summary: "Indoor Tennis",
+      summary: tennisSchedule.sessionName,
       description: `Booking URL: ${court.bookingUrl}\nPrice: ${court.price}`,
       start: { dateTime: `${court.date}T${court.startTime}:00`, timeZone: "Europe/London" },
       end: { dateTime: `${court.date}T${court.endTime}:00`, timeZone: "Europe/London" },
