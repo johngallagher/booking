@@ -4,6 +4,7 @@ import { chromium } from "playwright";
 import { authorize } from "./get-calendar-slots";
 import { getAllSlots, type AvailableCourt } from "./index";
 import { tennisSchedule } from "./config";
+import { withRetry, sleep } from "./calendar-retry";
 
 const KING_ACCOUNT = "kingofkerning@gmail.com";
 const JOHN_ACCOUNT = "john@synapticmishap.co.uk";
@@ -23,7 +24,7 @@ function courtMatchesEvent(court: AvailableCourt, event: calendar_v3.Schema$Even
 async function getExerciseCalendarId(
   calendar: ReturnType<typeof google.calendar>
 ): Promise<string> {
-  const res = await calendar.calendarList.list();
+  const res = await withRetry(() => calendar.calendarList.list());
   const cal = (res.data.items ?? []).find((c) => c.summary === EXERCISE_CALENDAR);
   if (!cal?.id) throw new Error(`"${EXERCISE_CALENDAR}" calendar not found on ${KING_ACCOUNT}`);
   return cal.id;
@@ -38,12 +39,12 @@ async function getExistingIndoorTennisEvents(
   const later = new Date(now);
   later.setDate(now.getDate() + lookaheadDays);
 
-  const res = await calendar.events.list({
+  const res = await withRetry(() => calendar.events.list({
     calendarId,
     timeMin: now.toISOString(),
     timeMax: later.toISOString(),
     singleEvents: true,
-  });
+  }));
 
   return (res.data.items ?? []).filter((e) => e.summary === tennisSchedule.sessionName);
 }
@@ -53,7 +54,7 @@ async function createIndoorTennisEvent(
   calendarId: string,
   court: AvailableCourt
 ): Promise<void> {
-  await calendar.events.insert({
+  await withRetry(() => calendar.events.insert({
     calendarId,
     sendUpdates: "all",
     requestBody: {
@@ -63,7 +64,7 @@ async function createIndoorTennisEvent(
       end: { dateTime: `${court.date}T${court.endTime}:00`, timeZone: "Europe/London" },
       attendees: [{ email: KING_ACCOUNT }, { email: JOHN_ACCOUNT }],
     },
-  });
+  }));
 }
 
 async function main() {
@@ -85,7 +86,8 @@ async function main() {
   for (const event of existingEvents) {
     if (event.description?.startsWith("BOOKED")) continue;
     if (!filteredCourts.some((court) => courtMatchesEvent(court, event))) {
-      await calendar.events.delete({ calendarId, eventId: event.id!, sendUpdates: "none" });
+      await withRetry(() => calendar.events.delete({ calendarId, eventId: event.id!, sendUpdates: "none" }));
+      await sleep(200);
       console.log(`Deleted: ${event.start?.dateTime} (no longer available)`);
       deleted++;
     }
@@ -100,6 +102,7 @@ async function main() {
       continue;
     }
     await createIndoorTennisEvent(calendar, calendarId, court);
+    await sleep(200);
     console.log(`Created: ${court.date} ${court.startTime}–${court.endTime} (${court.price})`);
     created++;
   }

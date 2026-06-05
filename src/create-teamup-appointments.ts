@@ -4,6 +4,7 @@ import { chromium } from "playwright";
 import { authorize } from "./get-calendar-slots";
 import { getAllSessions, type GymSession } from "./teamup-scraper";
 import { gymSchedule } from "./config";
+import { withRetry, sleep } from "./calendar-retry";
 
 const KING_ACCOUNT = "kingofkerning@gmail.com";
 const JOHN_ACCOUNT = "john@synapticmishap.co.uk";
@@ -49,9 +50,9 @@ async function getBusyPeriods(
 ): Promise<Array<{ start: Date; end: Date }>> {
   if (calendarItems.length === 0) return [];
 
-  const res = await calendar.freebusy.query({
+  const res = await withRetry(() => calendar.freebusy.query({
     requestBody: { timeMin: from.toISOString(), timeMax: to.toISOString(), items: calendarItems },
-  });
+  }));
 
   return Object.values(res.data.calendars ?? {}).flatMap(
     (cal) => (cal.busy ?? []).map((b) => ({ start: new Date(b.start!), end: new Date(b.end!) }))
@@ -80,7 +81,7 @@ function eventSummary(session: GymSession): string {
 async function getCalendars(
   calendar: ReturnType<typeof google.calendar>
 ): Promise<{ exerciseId: string; otherItems: Array<{ id: string }> }> {
-  const res = await calendar.calendarList.list();
+  const res = await withRetry(() => calendar.calendarList.list());
   const items = res.data.items ?? [];
   const exercise = items.find((c) => c.summary === EXERCISE_CALENDAR);
   if (!exercise?.id) throw new Error(`"${EXERCISE_CALENDAR}" calendar not found on ${KING_ACCOUNT}`);
@@ -99,12 +100,12 @@ async function getExistingGymEvents(
   const later = new Date(now);
   later.setDate(now.getDate() + lookaheadDays);
 
-  const res = await calendar.events.list({
+  const res = await withRetry(() => calendar.events.list({
     calendarId,
     timeMin: now.toISOString(),
     timeMax: later.toISOString(),
     singleEvents: true,
-  });
+  }));
 
   return (res.data.items ?? []).filter((e) => e.summary?.startsWith("Gym: "));
 }
@@ -114,7 +115,7 @@ async function createGymEvent(
   calendarId: string,
   session: GymSession
 ): Promise<void> {
-  await calendar.events.insert({
+  await withRetry(() => calendar.events.insert({
     calendarId,
     sendUpdates: "all",
     requestBody: {
@@ -123,7 +124,7 @@ async function createGymEvent(
       end: { dateTime: `${session.date}T${session.endTime}:00`, timeZone: "Europe/London" },
       attendees: [{ email: KING_ACCOUNT }, { email: JOHN_ACCOUNT }],
     },
-  });
+  }));
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -165,7 +166,8 @@ async function main() {
   let deleted = 0;
   for (const event of existingEvents) {
     if (!sessions.some((s) => sessionMatchesEvent(s, event))) {
-      await calendar.events.delete({ calendarId, eventId: event.id!, sendUpdates: "none" });
+      await withRetry(() => calendar.events.delete({ calendarId, eventId: event.id!, sendUpdates: "none" }));
+      await sleep(200);
       console.log(`Deleted: ${event.summary} @ ${event.start?.dateTime}`);
       deleted++;
     }
@@ -180,6 +182,7 @@ async function main() {
       continue;
     }
     await createGymEvent(calendar, calendarId, session);
+    await sleep(200);
     console.log(`Created: ${eventSummary(session)} @ ${session.date} ${session.startTime}–${session.endTime}`);
     created++;
   }
