@@ -1,7 +1,5 @@
 import { google } from "googleapis";
 import type { calendar_v3 } from "googleapis";
-import * as fs from "fs";
-import * as path from "path";
 import { chromium } from "playwright";
 import { authorize } from "./get-calendar-slots";
 import { getAllSessions, type GymSession } from "./teamup-scraper";
@@ -93,15 +91,6 @@ async function getCalendars(
   };
 }
 
-async function getNonExerciseItems(
-  calendar: ReturnType<typeof google.calendar>
-): Promise<Array<{ id: string }>> {
-  const res = await withRetry(() => calendar.calendarList.list());
-  return (res.data.items ?? [])
-    .filter((c) => c.summary !== EXERCISE_CALENDAR)
-    .map((c) => ({ id: c.id! }));
-}
-
 async function getExistingGymEvents(
   calendar: ReturnType<typeof google.calendar>,
   calendarId: string,
@@ -162,20 +151,7 @@ async function main() {
   const lookahead = new Date(now);
   lookahead.setDate(now.getDate() + 7);
 
-  const kingBusy = await getBusyPeriods(calKing, otherItems, now, lookahead);
-
-  let johnBusy: Array<{ start: Date; end: Date }> = [];
-  const johnTokenPath = path.join(process.cwd(), `token-${JOHN_ACCOUNT}.json`);
-  if (fs.existsSync(johnTokenPath)) {
-    const authJohn = await authorize(JOHN_ACCOUNT);
-    const calJohn = google.calendar({ version: "v3", auth: authJohn });
-    const johnItems = await getNonExerciseItems(calJohn);
-    johnBusy = await getBusyPeriods(calJohn, johnItems, now, lookahead);
-  } else {
-    console.warn(`No token for ${JOHN_ACCOUNT} — their calendar not checked for conflicts`);
-  }
-
-  const busyPeriods = [...kingBusy, ...johnBusy];
+  const busyPeriods = await getBusyPeriods(calKing, otherItems, now, lookahead);
   const sessions = windowed.filter((s) => {
     if (conflictsWithBusy(s, busyPeriods)) {
       console.log(`Skipped (conflict): ${eventSummary(s)} @ ${s.date} ${s.startTime}–${s.endTime}`);
