@@ -26,7 +26,7 @@ export async function withRetry<T>(fn: () => Promise<T>, maxAttempts = 6): Promi
       return await fn();
     } catch (err) {
       if (!isRateLimitError(err) || attempt === maxAttempts - 1) throw err;
-      const delay = Math.pow(2, attempt) * 1000 + Math.random() * 500;
+      const delay = Math.min(Math.pow(2, attempt) * 1000 + Math.floor(Math.random() * 1000), 32_000);
       console.warn(`Rate limited — retrying in ${(delay / 1000).toFixed(1)}s (attempt ${attempt + 1}/${maxAttempts - 1})`);
       await sleep(delay);
     }
