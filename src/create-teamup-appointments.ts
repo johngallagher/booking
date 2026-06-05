@@ -43,19 +43,14 @@ function sessionToDate(session: GymSession, field: "startTime" | "endTime"): Dat
 
 async function getBusyPeriods(
   calendar: ReturnType<typeof google.calendar>,
-  excludeCalendarId: string,
+  calendarItems: Array<{ id: string }>,
   from: Date,
   to: Date
 ): Promise<Array<{ start: Date; end: Date }>> {
-  const calList = await calendar.calendarList.list();
-  const items = (calList.data.items ?? [])
-    .filter((c) => c.id !== excludeCalendarId)
-    .map((c) => ({ id: c.id! }));
-
-  if (items.length === 0) return [];
+  if (calendarItems.length === 0) return [];
 
   const res = await calendar.freebusy.query({
-    requestBody: { timeMin: from.toISOString(), timeMax: to.toISOString(), items },
+    requestBody: { timeMin: from.toISOString(), timeMax: to.toISOString(), items: calendarItems },
   });
 
   return Object.values(res.data.calendars ?? {}).flatMap(
@@ -82,13 +77,17 @@ function eventSummary(session: GymSession): string {
   return `Gym: ${session.name}`;
 }
 
-async function getExerciseCalendarId(
+async function getCalendars(
   calendar: ReturnType<typeof google.calendar>
-): Promise<string> {
+): Promise<{ exerciseId: string; otherItems: Array<{ id: string }> }> {
   const res = await calendar.calendarList.list();
-  const cal = (res.data.items ?? []).find((c) => c.summary === EXERCISE_CALENDAR);
-  if (!cal?.id) throw new Error(`"${EXERCISE_CALENDAR}" calendar not found on ${KING_ACCOUNT}`);
-  return cal.id;
+  const items = res.data.items ?? [];
+  const exercise = items.find((c) => c.summary === EXERCISE_CALENDAR);
+  if (!exercise?.id) throw new Error(`"${EXERCISE_CALENDAR}" calendar not found on ${KING_ACCOUNT}`);
+  return {
+    exerciseId: exercise.id,
+    otherItems: items.filter((c) => c.id !== exercise.id).map((c) => ({ id: c.id! })),
+  };
 }
 
 async function getExistingGymEvents(
@@ -146,12 +145,12 @@ async function main() {
 
   const auth = await authorize(KING_ACCOUNT);
   const calendar = google.calendar({ version: "v3", auth });
-  const calendarId = await getExerciseCalendarId(calendar);
+  const { exerciseId: calendarId, otherItems } = await getCalendars(calendar);
 
   const lookahead = new Date(now);
   lookahead.setDate(now.getDate() + 7);
 
-  const busyPeriods = await getBusyPeriods(calendar, calendarId, now, lookahead);
+  const busyPeriods = await getBusyPeriods(calendar, otherItems, now, lookahead);
   const sessions = windowed.filter((s) => {
     if (conflictsWithBusy(s, busyPeriods)) {
       console.log(`Skipped (conflict): ${eventSummary(s)} @ ${s.date} ${s.startTime}–${s.endTime}`);
@@ -166,7 +165,7 @@ async function main() {
   let deleted = 0;
   for (const event of existingEvents) {
     if (!sessions.some((s) => sessionMatchesEvent(s, event))) {
-      await calendar.events.delete({ calendarId, eventId: event.id!, sendUpdates: "all" });
+      await calendar.events.delete({ calendarId, eventId: event.id!, sendUpdates: "none" });
       console.log(`Deleted: ${event.summary} @ ${event.start?.dateTime}`);
       deleted++;
     }

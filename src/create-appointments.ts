@@ -84,7 +84,7 @@ async function main() {
   for (const event of existingEvents) {
     if (event.description?.startsWith("BOOKED")) continue;
     if (!filteredCourts.some((court) => courtMatchesEvent(court, event))) {
-      await calendar.events.delete({ calendarId, eventId: event.id!, sendUpdates: "all" });
+      await calendar.events.delete({ calendarId, eventId: event.id!, sendUpdates: "none" });
       console.log(`Deleted: ${event.start?.dateTime} (no longer available)`);
       deleted++;
     }
