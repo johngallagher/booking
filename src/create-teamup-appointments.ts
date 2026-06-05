@@ -91,6 +91,15 @@ async function getCalendars(
   };
 }
 
+async function getNonExerciseItems(
+  calendar: ReturnType<typeof google.calendar>
+): Promise<Array<{ id: string }>> {
+  const res = await withRetry(() => calendar.calendarList.list());
+  return (res.data.items ?? [])
+    .filter((c) => c.summary !== EXERCISE_CALENDAR)
+    .map((c) => ({ id: c.id! }));
+}
+
 async function getExistingGymEvents(
   calendar: ReturnType<typeof google.calendar>,
   calendarId: string,
@@ -144,14 +153,22 @@ async function main() {
   const windowed = allSessions.filter(isWithinSchedule);
   console.log(`${windowed.length} within schedule window (before ${gymSchedule.morningEndBy} or from ${gymSchedule.eveningStartFrom})`);
 
-  const auth = await authorize(KING_ACCOUNT);
-  const calendar = google.calendar({ version: "v3", auth });
-  const { exerciseId: calendarId, otherItems } = await getCalendars(calendar);
+  const authKing = await authorize(KING_ACCOUNT);
+  const calKing = google.calendar({ version: "v3", auth: authKing });
+  const { exerciseId: calendarId, otherItems } = await getCalendars(calKing);
+
+  const authJohn = await authorize(JOHN_ACCOUNT);
+  const calJohn = google.calendar({ version: "v3", auth: authJohn });
+  const johnItems = await getNonExerciseItems(calJohn);
 
   const lookahead = new Date(now);
   lookahead.setDate(now.getDate() + 7);
 
-  const busyPeriods = await getBusyPeriods(calendar, otherItems, now, lookahead);
+  const [kingBusy, johnBusy] = await Promise.all([
+    getBusyPeriods(calKing, otherItems, now, lookahead),
+    getBusyPeriods(calJohn, johnItems, now, lookahead),
+  ]);
+  const busyPeriods = [...kingBusy, ...johnBusy];
   const sessions = windowed.filter((s) => {
     if (conflictsWithBusy(s, busyPeriods)) {
       console.log(`Skipped (conflict): ${eventSummary(s)} @ ${s.date} ${s.startTime}–${s.endTime}`);
@@ -160,13 +177,13 @@ async function main() {
     return true;
   });
   console.log(`${sessions.length} session(s) after conflict check`);
-  const existingEvents = await getExistingGymEvents(calendar, calendarId, 7);
+  const existingEvents = await getExistingGymEvents(calKing, calendarId, 7);
 
   // Delete stale gym events (no longer available, out of window, or now conflicting)
   let deleted = 0;
   for (const event of existingEvents) {
     if (!sessions.some((s) => sessionMatchesEvent(s, event))) {
-      await withRetry(() => calendar.events.delete({ calendarId, eventId: event.id!, sendUpdates: "none" }));
+      await withRetry(() => calKing.events.delete({ calendarId, eventId: event.id!, sendUpdates: "none" }));
       await sleep(200);
       console.log(`Deleted: ${event.summary} @ ${event.start?.dateTime}`);
       deleted++;
@@ -181,7 +198,7 @@ async function main() {
       skipped++;
       continue;
     }
-    await createGymEvent(calendar, calendarId, session);
+    await createGymEvent(calKing, calendarId, session);
     await sleep(200);
     console.log(`Created: ${eventSummary(session)} @ ${session.date} ${session.startTime}–${session.endTime}`);
     created++;
