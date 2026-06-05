@@ -1,5 +1,6 @@
 import { chromium, type Page } from "playwright";
 import * as fs from "fs";
+import { gymSchedule } from "./config";
 
 const SCHEDULE_BASE = "https://goteamup.com/p/4993559-tribe-ormeau/c/schedule";
 const LOGIN_URL = "https://goteamup.com/login/";
@@ -12,11 +13,9 @@ export interface GymSession {
   spotsAvailable: number;
 }
 
-const EXCLUDED = ["hyrox", "high rocks", "progress review"];
-
 export function isExcluded(name: string): boolean {
   const lower = name.toLowerCase();
-  return EXCLUDED.some((kw) => lower.includes(kw));
+  return gymSchedule.excludedSessions.some((kw) => lower.includes(kw));
 }
 
 function toLocalDateString(d: Date): string {
