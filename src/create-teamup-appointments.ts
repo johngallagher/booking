@@ -117,7 +117,7 @@ async function createGymEvent(
 ): Promise<void> {
   await withRetry(() => calendar.events.insert({
     calendarId,
-    sendUpdates: "all",
+    sendUpdates: "none",
     requestBody: {
       summary: eventSummary(session),
       start: { dateTime: `${session.date}T${session.startTime}:00`, timeZone: "Europe/London" },

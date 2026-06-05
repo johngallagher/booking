@@ -56,7 +56,7 @@ async function createIndoorTennisEvent(
 ): Promise<void> {
   await withRetry(() => calendar.events.insert({
     calendarId,
-    sendUpdates: "all",
+    sendUpdates: "none",
     requestBody: {
       summary: tennisSchedule.sessionName,
       description: `Booking URL: ${court.bookingUrl}\nPrice: ${court.price}`,
