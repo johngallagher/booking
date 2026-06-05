@@ -184,7 +184,7 @@ async function main() {
   for (const event of existingEvents) {
     if (!sessions.some((s) => sessionMatchesEvent(s, event))) {
       await withRetry(() => calKing.events.delete({ calendarId, eventId: event.id!, sendUpdates: "none" }));
-      await sleep(200);
+      await sleep(500);
       console.log(`Deleted: ${event.summary} @ ${event.start?.dateTime}`);
       deleted++;
     }
@@ -199,7 +199,7 @@ async function main() {
       continue;
     }
     await createGymEvent(calKing, calendarId, session);
-    await sleep(200);
+    await sleep(500);
     console.log(`Created: ${eventSummary(session)} @ ${session.date} ${session.startTime}–${session.endTime}`);
     created++;
   }

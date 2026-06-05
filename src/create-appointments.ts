@@ -87,7 +87,7 @@ async function main() {
     if (event.description?.startsWith("BOOKED")) continue;
     if (!filteredCourts.some((court) => courtMatchesEvent(court, event))) {
       await withRetry(() => calendar.events.delete({ calendarId, eventId: event.id!, sendUpdates: "none" }));
-      await sleep(200);
+      await sleep(500);
       console.log(`Deleted: ${event.start?.dateTime} (no longer available)`);
       deleted++;
     }
@@ -102,7 +102,7 @@ async function main() {
       continue;
     }
     await createIndoorTennisEvent(calendar, calendarId, court);
-    await sleep(200);
+    await sleep(500);
     console.log(`Created: ${court.date} ${court.startTime}–${court.endTime} (${court.price})`);
     created++;
   }
