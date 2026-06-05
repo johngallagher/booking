@@ -15,7 +15,7 @@ function isRateLimitError(err: unknown): boolean {
   if (status === 429) return true;
   if (status === 403) {
     const reasons = e.response?.data?.error?.errors?.map((x) => x.reason) ?? [];
-    return reasons.some((r) => r === "rateLimitExceeded" || r === "userRateLimitExceeded");
+    return reasons.some((r) => r === "rateLimitExceeded" || r === "userRateLimitExceeded" || r === "calendarUsageLimitsExceeded");
   }
   return false;
 }
