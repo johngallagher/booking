@@ -7,7 +7,6 @@ import { tennisSchedule, exerciseCalendarId } from "./config";
 import { withRetry, sleep } from "./calendar-retry";
 
 const KING_ACCOUNT = "kingofkerning@gmail.com";
-const JOHN_ACCOUNT = "john@synapticmishap.co.uk";
 
 function isEveningOrWeekend(court: AvailableCourt): boolean {
   if (court.startTime >= "18:00") return true;
@@ -52,7 +51,6 @@ async function createIndoorTennisEvent(
       description: `Booking URL: ${court.bookingUrl}\nPrice: ${court.price}`,
       start: { dateTime: `${court.date}T${court.startTime}:00`, timeZone: "Europe/London" },
       end: { dateTime: `${court.date}T${court.endTime}:00`, timeZone: "Europe/London" },
-      attendees: [{ email: KING_ACCOUNT }, { email: JOHN_ACCOUNT }],
     },
   }));
 }

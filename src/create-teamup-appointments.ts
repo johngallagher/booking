@@ -7,7 +7,6 @@ import { gymSchedule, exerciseCalendarId } from "./config";
 import { withRetry, sleep } from "./calendar-retry";
 
 const KING_ACCOUNT = "kingofkerning@gmail.com";
-const JOHN_ACCOUNT = "john@synapticmishap.co.uk";
 
 // ── Time window filter ────────────────────────────────────────────────────────
 
@@ -119,7 +118,6 @@ async function createGymEvent(
       summary: eventSummary(session),
       start: { dateTime: `${session.date}T${session.startTime}:00`, timeZone: "Europe/London" },
       end: { dateTime: `${session.date}T${session.endTime}:00`, timeZone: "Europe/London" },
-      attendees: [{ email: KING_ACCOUNT }, { email: JOHN_ACCOUNT }],
     },
   }));
 }
