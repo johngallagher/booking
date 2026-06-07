@@ -1,6 +1,6 @@
 export const gymSchedule = {
   // Include sessions ending at or before this time (early morning window)
-  morningEndBy: "09:00",
+  morningEndBy: "09:30",
   // Include sessions starting at or after this time (evening window)
   eveningStartFrom: "17:00",
   activeMembership: "boxing" as "boxing" | "sgpt",
