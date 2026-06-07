@@ -11,6 +11,7 @@ export interface GymSession {
   startTime: string;
   endTime: string;
   spotsAvailable: number;
+  bookingUrl?: string;
 }
 
 function allowedSessions(): string[] {
@@ -71,6 +72,46 @@ async function login(page: Page, email: string, password: string): Promise<void>
     timeout: 15000,
   });
   console.log("Logged in to TeamUp");
+}
+
+// Clicking the list-level "Book" button opens a details modal and pushes a
+// `?...&e=<id>` URL via client-side routing — without booking the class.
+// Only the modal's internal "Book now" button actually books, and we never touch it.
+async function closeBookingModal(page: Page): Promise<void> {
+  await page.keyboard.press("Escape").catch(() => {});
+  await page.waitForTimeout(500);
+  if (/[?&]e=\d+/.test(page.url())) {
+    await page.goBack({ waitUntil: "domcontentloaded" }).catch(() => {});
+  }
+  await page.waitForSelector(".schedule-event-container", { timeout: 10000 }).catch(() => {});
+}
+
+async function extractBookingUrl(page: Page, session: GymSession): Promise<string | undefined> {
+  try {
+    const timeEls = page.locator(`time[datetime="${session.date}T${session.startTime}:00"]`);
+    const count = await timeEls.count();
+    for (let i = 0; i < count; i++) {
+      const container = timeEls.nth(i).locator("xpath=following-sibling::*[1]");
+      const name = (
+        (await container.locator(".eventitem-name h6, h6.title").textContent().catch(() => "")) ?? ""
+      )
+        .replace(/<!---->/g, "")
+        .trim();
+      if (name.toLowerCase() !== session.name.toLowerCase()) continue;
+
+      await container.getByRole("button", { name: "Book", exact: true }).click({ timeout: 5000 });
+      await page.waitForURL(/[?&]e=\d+/, { timeout: 10000 });
+      const url = page.url();
+      await closeBookingModal(page);
+      return url;
+    }
+  } catch (err) {
+    console.log(
+      `Could not extract booking URL for "${session.name}" @ ${session.date} ${session.startTime}: ${err}`
+    );
+    await closeBookingModal(page);
+  }
+  return undefined;
 }
 
 export async function getAllSessions(page: Page): Promise<GymSession[]> {
@@ -150,6 +191,10 @@ export async function getAllSessions(page: Page): Promise<GymSession[]> {
   const before = sessions.length;
   const filtered = sessions.filter((s) => isAllowed(s.name) && s.spotsAvailable > 0);
   console.log(`${before} raw session(s), ${filtered.length} after filtering excluded/full`);
+
+  for (const session of filtered) {
+    session.bookingUrl = await extractBookingUrl(page, session);
+  }
 
   if (debug) {
     console.log("\n── DEBUG: all raw sessions ──");
