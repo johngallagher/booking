@@ -3,12 +3,11 @@ import type { calendar_v3 } from "googleapis";
 import { chromium } from "playwright";
 import { authorize } from "./get-calendar-slots";
 import { getAllSlots, type AvailableCourt } from "./index";
-import { tennisSchedule } from "./config";
+import { tennisSchedule, exerciseCalendarId } from "./config";
 import { withRetry, sleep } from "./calendar-retry";
 
 const KING_ACCOUNT = "kingofkerning@gmail.com";
 const JOHN_ACCOUNT = "john@synapticmishap.co.uk";
-const EXERCISE_CALENDAR = "Exercise";
 
 function isEveningOrWeekend(court: AvailableCourt): boolean {
   if (court.startTime >= "18:00") return true;
@@ -19,15 +18,6 @@ function isEveningOrWeekend(court: AvailableCourt): boolean {
 
 function courtMatchesEvent(court: AvailableCourt, event: calendar_v3.Schema$Event): boolean {
   return !!event.start?.dateTime?.startsWith(`${court.date}T${court.startTime}`);
-}
-
-async function getExerciseCalendarId(
-  calendar: ReturnType<typeof google.calendar>
-): Promise<string> {
-  const res = await withRetry(() => calendar.calendarList.list());
-  const cal = (res.data.items ?? []).find((c) => c.summary === EXERCISE_CALENDAR);
-  if (!cal?.id) throw new Error(`"${EXERCISE_CALENDAR}" calendar not found on ${KING_ACCOUNT}`);
-  return cal.id;
 }
 
 async function getExistingIndoorTennisEvents(
@@ -78,7 +68,7 @@ async function main() {
 
   const auth = await authorize(KING_ACCOUNT);
   const calendar = google.calendar({ version: "v3", auth });
-  const calendarId = await getExerciseCalendarId(calendar);
+  const calendarId = exerciseCalendarId;
   const existingEvents = await getExistingIndoorTennisEvents(calendar, calendarId, 7);
 
   // Delete events that are no longer in the available courts list (skip already-booked ones)

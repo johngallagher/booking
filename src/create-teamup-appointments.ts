@@ -3,12 +3,11 @@ import type { calendar_v3 } from "googleapis";
 import { chromium } from "playwright";
 import { authorize } from "./get-calendar-slots";
 import { getAllSessions, type GymSession } from "./teamup-scraper";
-import { gymSchedule } from "./config";
+import { gymSchedule, exerciseCalendarId } from "./config";
 import { withRetry, sleep } from "./calendar-retry";
 
 const KING_ACCOUNT = "kingofkerning@gmail.com";
 const JOHN_ACCOUNT = "john@synapticmishap.co.uk";
-const EXERCISE_CALENDAR = "Exercise";
 
 // ── Time window filter ────────────────────────────────────────────────────────
 
@@ -83,11 +82,9 @@ async function getCalendars(
 ): Promise<{ exerciseId: string; otherItems: Array<{ id: string }> }> {
   const res = await withRetry(() => calendar.calendarList.list());
   const items = res.data.items ?? [];
-  const exercise = items.find((c) => c.summary === EXERCISE_CALENDAR);
-  if (!exercise?.id) throw new Error(`"${EXERCISE_CALENDAR}" calendar not found on ${KING_ACCOUNT}`);
   return {
-    exerciseId: exercise.id,
-    otherItems: items.filter((c) => c.id !== exercise.id).map((c) => ({ id: c.id! })),
+    exerciseId: exerciseCalendarId,
+    otherItems: items.filter((c) => c.id !== exerciseCalendarId).map((c) => ({ id: c.id! })),
   };
 }
 

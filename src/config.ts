@@ -17,3 +17,8 @@ export const gymSchedule = {
 export const tennisSchedule = {
   sessionName: "Indoor Tennis",
 };
+
+// Service accounts don't auto-populate calendarList with shared calendars,
+// so we reference the "Exercise" calendar directly by its known ID.
+export const exerciseCalendarId =
+  "c6a0051835d914274ad7ea435c2237117b0f77f537434f7cf036fee4cdf903a8@group.calendar.google.com";
