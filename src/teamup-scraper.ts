@@ -148,16 +148,35 @@ export async function getAllSessions(page: Page): Promise<GymSession[]> {
   const raw = await page.evaluate((debug: boolean) => {
     const containers = Array.from(document.querySelectorAll(".schedule-event-container"));
 
-    return containers.flatMap((container) => {
-      // The <time> element is the direct previous sibling
-      const timeEl = container.previousElementSibling as HTMLElement | null;
-      if (timeEl?.tagName !== "TIME") return [];
+    // TeamUp's <time datetime="..."> values are in UTC; convert to Europe/London
+    // local time so displayed times match what the site shows the user.
+    const fmt = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Europe/London",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    });
 
-      const datetime = timeEl.getAttribute("datetime") ?? "";
-      // datetime = "2026-06-01T05:00:00"
-      const [datePart, timePart] = datetime.split("T");
-      if (!datePart || !timePart) return [];
-      const startTime = timePart.slice(0, 5); // "05:00"
+    return containers.flatMap((container) => {
+      // Multiple sessions can share one <time> header — walk back to find the
+      // nearest preceding <time> sibling rather than assuming it's the direct one
+      let timeEl = container.previousElementSibling as HTMLElement | null;
+      while (timeEl && timeEl.tagName !== "TIME") {
+        timeEl = timeEl.previousElementSibling as HTMLElement | null;
+      }
+      if (!timeEl) return [];
+
+      const datetimeRaw = timeEl.getAttribute("datetime") ?? "";
+      const d = new Date(datetimeRaw);
+      if (isNaN(d.getTime())) return [];
+
+      const parts = fmt.formatToParts(d);
+      const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+      const datePart = `${get("year")}-${get("month")}-${get("day")}`;
+      const startTime = `${get("hour")}:${get("minute")}`; // "08:00" in Europe/London
 
       const titleEl = container.querySelector(".eventitem-name h6, h6.title");
       const name = (titleEl?.textContent ?? "").replace(/<!---->/g, "").trim();
@@ -176,7 +195,7 @@ export async function getAllSessions(page: Page): Promise<GymSession[]> {
         sampleHtml = container.outerHTML.slice(0, 4000);
       }
 
-      return [{ name, date: datePart, startTime, spotsText, bookingHref, sampleHtml }];
+      return [{ name, date: datePart, startTime, datetimeRaw, spotsText, bookingHref, sampleHtml }];
     });
   }, debug);
 
@@ -200,7 +219,7 @@ export async function getAllSessions(page: Page): Promise<GymSession[]> {
     console.log("\n── DEBUG: all raw sessions ──");
     for (const s of raw) {
       console.log(
-        `${s.date} ${s.startTime} | "${s.name}" | spots="${s.spotsText}" | allowed=${isAllowed(s.name)} | href=${s.bookingHref ?? "none"}`
+        `${s.date} ${s.startTime} (raw datetime="${s.datetimeRaw}") | "${s.name}" | spots="${s.spotsText}" | allowed=${isAllowed(s.name)} | href=${s.bookingHref ?? "none"}`
       );
     }
     const withHref = raw.find((s) => s.bookingHref);
