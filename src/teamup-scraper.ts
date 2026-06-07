@@ -102,7 +102,9 @@ export async function getAllSessions(page: Page): Promise<GymSession[]> {
     console.log(`Debug files saved for ${startStr}`);
   }
 
-  const raw = await page.evaluate(() => {
+  const debug = !!process.env.TEAMUP_DEBUG;
+
+  const raw = await page.evaluate((debug: boolean) => {
     const containers = Array.from(document.querySelectorAll(".schedule-event-container"));
 
     return containers.flatMap((container) => {
@@ -124,9 +126,18 @@ export async function getAllSessions(page: Page): Promise<GymSession[]> {
       const spotsEl = container.querySelector(".i-fas-user, .i-fas-users")?.closest("p");
       const spotsText = (spotsEl?.textContent ?? "").trim();
 
-      return [{ name, date: datePart, startTime, spotsText }];
+      // Look for any link/element carrying a booking event id (e.g. href="...?e=12345" or data-* attrs)
+      let bookingHref: string | null = null;
+      let sampleHtml: string | null = null;
+      if (debug) {
+        const link = container.querySelector<HTMLAnchorElement>('a[href*="e="], a[href*="event"]');
+        bookingHref = link?.getAttribute("href") ?? null;
+        sampleHtml = container.outerHTML.slice(0, 4000);
+      }
+
+      return [{ name, date: datePart, startTime, spotsText, bookingHref, sampleHtml }];
     });
-  });
+  }, debug);
 
   const sessions: GymSession[] = raw.map((s) => ({
     name: s.name,
@@ -139,6 +150,24 @@ export async function getAllSessions(page: Page): Promise<GymSession[]> {
   const before = sessions.length;
   const filtered = sessions.filter((s) => isAllowed(s.name) && s.spotsAvailable > 0);
   console.log(`${before} raw session(s), ${filtered.length} after filtering excluded/full`);
+
+  if (debug) {
+    console.log("\n── DEBUG: all raw sessions ──");
+    for (const s of raw) {
+      console.log(
+        `${s.date} ${s.startTime} | "${s.name}" | spots="${s.spotsText}" | allowed=${isAllowed(s.name)} | href=${s.bookingHref ?? "none"}`
+      );
+    }
+    const withHref = raw.find((s) => s.bookingHref);
+    if (withHref?.sampleHtml) {
+      console.log("\n── DEBUG: sample container HTML (with booking href) ──");
+      console.log(withHref.sampleHtml);
+    } else if (raw[0]?.sampleHtml) {
+      console.log("\n── DEBUG: sample container HTML (first session, no href found) ──");
+      console.log(raw[0].sampleHtml);
+    }
+  }
+
   return filtered;
 }
 

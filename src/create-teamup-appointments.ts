@@ -118,6 +118,8 @@ async function createGymEvent(
       summary: eventSummary(session),
       start: { dateTime: `${session.date}T${session.startTime}:00`, timeZone: "Europe/London" },
       end: { dateTime: `${session.date}T${session.endTime}:00`, timeZone: "Europe/London" },
+      status: "tentative",
+      transparency: "transparent",
     },
   }));
 }
