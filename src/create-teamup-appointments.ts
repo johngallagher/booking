@@ -128,9 +128,13 @@ async function createGymEvent(
 
 async function main() {
   const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage();
-  const rawSessions = await getAllSessions(page);
-  await browser.close();
+  let rawSessions: GymSession[];
+  try {
+    const page = await browser.newPage();
+    rawSessions = await getAllSessions(page);
+  } finally {
+    await browser.close();
+  }
 
   const now = new Date();
   // TeamUp returns the full week view including past days — discard sessions that have already started
@@ -187,4 +191,11 @@ async function main() {
   console.log(`\nDone: ${created} created, ${skipped} already existed, ${deleted} deleted`);
 }
 
-if (require.main === module) main().catch(console.error);
+if (require.main === module) {
+  main()
+    .then(() => process.exit(0))
+    .catch((err) => {
+      console.error(err);
+      process.exit(1);
+    });
+}

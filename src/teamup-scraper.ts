@@ -193,13 +193,22 @@ export async function getAllSessions(page: Page): Promise<GymSession[]> {
 
 async function main() {
   const browser = await chromium.launch({ headless: process.env.CI === "true" });
-  const page = await browser.newPage();
+  try {
+    const page = await browser.newPage();
 
-  const sessions = await getAllSessions(page);
-  console.log("\nAll available sessions:");
-  console.log(JSON.stringify(sessions, null, 2));
-
-  await browser.close();
+    const sessions = await getAllSessions(page);
+    console.log("\nAll available sessions:");
+    console.log(JSON.stringify(sessions, null, 2));
+  } finally {
+    await browser.close();
+  }
 }
 
-if (require.main === module) main().catch(console.error);
+if (require.main === module) {
+  main()
+    .then(() => process.exit(0))
+    .catch((err) => {
+      console.error(err);
+      process.exit(1);
+    });
+}
