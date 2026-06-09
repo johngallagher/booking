@@ -116,7 +116,6 @@ async function createGymEvent(
     sendUpdates: "none",
     requestBody: {
       summary: eventSummary(session),
-      description: session.bookingUrl ? `Booking URL: ${session.bookingUrl}` : undefined,
       start: { dateTime: `${session.date}T${session.startTime}:00`, timeZone: "Europe/London" },
       end: { dateTime: `${session.date}T${session.endTime}:00`, timeZone: "Europe/London" },
       status: "tentative",
