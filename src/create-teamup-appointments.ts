@@ -2,7 +2,7 @@ import { google } from "googleapis";
 import type { calendar_v3 } from "googleapis";
 import { chromium } from "playwright";
 import { authorize } from "./get-calendar-slots";
-import { getAllSessions, type GymSession } from "./teamup-scraper";
+import { getAllSessions, scheduleUrlForDate, type GymSession } from "./teamup-scraper";
 import { gymSchedule, exerciseCalendarId, workspaceUser } from "./config";
 import { withRetry, sleep } from "./calendar-retry";
 
@@ -136,6 +136,7 @@ async function createGymEvent(
     sendUpdates: "none",
     requestBody: {
       summary: eventSummary(session),
+      description: `Book now: ${scheduleUrlForDate(session.date)}`,
       attendees: [{ email: KING_ACCOUNT }],
       start: { dateTime: `${session.date}T${session.startTime}:00`, timeZone: "Europe/London" },
       end: { dateTime: `${session.date}T${session.endTime}:00`, timeZone: "Europe/London" },
