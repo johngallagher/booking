@@ -106,6 +106,11 @@ export async function getAllSessions(page: Page): Promise<GymSession[]> {
   const debug = !!process.env.TEAMUP_DEBUG;
 
   const raw = await page.evaluate((debug: boolean) => {
+    // tsx/esbuild's keepNames option wraps named const functions (e.g. `get` below)
+    // in calls to a `__name` helper. That helper isn't defined in the page context
+    // when this function is serialized for page.evaluate, so polyfill it here.
+    (globalThis as Record<string, unknown>).__name ??= (fn: unknown) => fn;
+
     const containers = Array.from(document.querySelectorAll(".schedule-event-container"));
 
     // TeamUp's <time datetime="..."> values are in UTC; convert to Europe/London
