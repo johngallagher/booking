@@ -18,6 +18,11 @@ export const tennisSchedule = {
   sessionName: "Indoor Tennis",
 };
 
+// Workspace user the service account impersonates via domain-wide delegation.
+// Events are created as this user, so they can invite external attendees
+// (plain service accounts are forbidden from adding attendees).
+export const workspaceUser = "john@synapticmishap.co.uk";
+
 // Service accounts don't auto-populate calendarList with shared calendars,
 // so we reference the "Exercise" calendar directly by its known ID.
 export const exerciseCalendarId =

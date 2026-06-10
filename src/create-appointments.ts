@@ -3,7 +3,7 @@ import type { calendar_v3 } from "googleapis";
 import { chromium } from "playwright";
 import { authorize } from "./get-calendar-slots";
 import { getAllSlots, type AvailableCourt } from "./index";
-import { tennisSchedule, exerciseCalendarId } from "./config";
+import { tennisSchedule, exerciseCalendarId, workspaceUser } from "./config";
 import { withRetry, sleep } from "./calendar-retry";
 
 const KING_ACCOUNT = "kingofkerning@gmail.com";
@@ -67,7 +67,7 @@ async function main() {
   const filteredCourts = availableCourts.filter(isEveningOrWeekend);
   console.log(`${filteredCourts.length} evening/weekend court(s) found`);
 
-  const auth = await authorize(KING_ACCOUNT);
+  const auth = await authorize(KING_ACCOUNT, workspaceUser);
   const calendar = google.calendar({ version: "v3", auth });
   const calendarId = exerciseCalendarId;
   const existingEvents = await getExistingIndoorTennisEvents(calendar, calendarId, 7);

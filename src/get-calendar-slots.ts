@@ -54,12 +54,15 @@ async function getNewToken(
   console.log(`Token saved for ${account}`);
 }
 
-export async function authorize(account?: string) {
-  // Service account auth — never expires, no interactive flow needed
+export async function authorize(account?: string, impersonate?: string) {
+  // Service account auth — never expires, no interactive flow needed.
+  // When `impersonate` is set, the service account acts as that Workspace user
+  // (requires domain-wide delegation), which allows inviting external attendees.
   if (fs.existsSync(SERVICE_ACCOUNT_PATH)) {
     const auth = new google.auth.GoogleAuth({
       keyFile: SERVICE_ACCOUNT_PATH,
       scopes: SCOPES,
+      clientOptions: impersonate ? { subject: impersonate } : undefined,
     });
     return auth.getClient();
   }
