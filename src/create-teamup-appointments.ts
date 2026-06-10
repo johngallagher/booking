@@ -96,6 +96,10 @@ function eventSummary(session: GymSession): string {
   return `Gym: ${session.name}`;
 }
 
+function eventDescription(session: GymSession): string {
+  return `Book now: ${session.bookingUrl ?? scheduleUrlForDate(session.date)}`;
+}
+
 async function getCalendars(
   calendar: ReturnType<typeof google.calendar>
 ): Promise<{ exerciseId: string; otherItems: Array<{ id: string }> }> {
@@ -136,7 +140,7 @@ async function createGymEvent(
     sendUpdates: "none",
     requestBody: {
       summary: eventSummary(session),
-      description: `Book now: ${session.bookingUrl ?? scheduleUrlForDate(session.date)}`,
+      description: eventDescription(session),
       attendees: [{ email: KING_ACCOUNT }],
       start: { dateTime: `${session.date}T${session.startTime}:00`, timeZone: "Europe/London" },
       end: { dateTime: `${session.date}T${session.endTime}:00`, timeZone: "Europe/London" },
@@ -239,14 +243,36 @@ async function main() {
   let created = 0;
   let skipped = 0;
   let rested = 0;
+  let updated = 0;
   for (const session of sessions) {
     if (restDates.has(session.date)) {
       console.log(`Rested: ${eventSummary(session)} @ ${session.date} ${session.startTime}–${session.endTime}`);
       rested++;
       continue;
     }
-    if (existingEvents.some((event) => sessionMatchesEvent(session, event))) {
-      console.log(`Already exists: ${eventSummary(session)} @ ${session.date} ${session.startTime}–${session.endTime}`);
+    const existingEvent = existingEvents.find((event) => sessionMatchesEvent(session, event));
+    if (existingEvent) {
+      // Older events were created before booking links were captured (or before
+      // the link's `e=` id was available) — refresh the description so the
+      // calendar entry always points at the correct booking modal.
+      const desiredDescription = eventDescription(session);
+      if (
+        session.bookingUrl &&
+        !isDeclinedTombstone(existingEvent) &&
+        existingEvent.description !== desiredDescription
+      ) {
+        await withRetry(() => calKing.events.patch({
+          calendarId,
+          eventId: existingEvent.id!,
+          sendUpdates: "none",
+          requestBody: { description: desiredDescription },
+        }));
+        await sleep(500);
+        console.log(`Updated link: ${eventSummary(session)} @ ${session.date} ${session.startTime}–${session.endTime}`);
+        updated++;
+      } else {
+        console.log(`Already exists: ${eventSummary(session)} @ ${session.date} ${session.startTime}–${session.endTime}`);
+      }
       skipped++;
       continue;
     }
@@ -256,7 +282,7 @@ async function main() {
     created++;
   }
 
-  console.log(`\nDone: ${created} created, ${skipped} already existed, ${rested} skipped (rest day), ${deleted} deleted`);
+  console.log(`\nDone: ${created} created, ${updated} link(s) updated, ${skipped} already existed, ${rested} skipped (rest day), ${deleted} deleted`);
 }
 
 if (require.main === module) {
