@@ -88,30 +88,51 @@ export async function getAllSessions(page: Page): Promise<GymSession[]> {
   await login(page, email, password);
 
   const today = new Date();
-  const endD = new Date(today);
-  endD.setDate(today.getDate() + 6);
-  const startStr = toLocalDateString(today);
-  const endStr = toLocalDateString(endD);
-
-  // One load covers the full 7-day window
-  const url = `${SCHEDULE_BASE}?startdate=${startStr}&enddate=${endStr}&date=${startStr}`;
-  await page.goto(url, { waitUntil: "domcontentloaded" });
-  await page.waitForLoadState("networkidle");
-
-  // Wait for schedule items to appear
-  await page
-    .waitForSelector(".schedule-event-container", { timeout: 10000 })
-    .catch(() => {});
-
-  if (process.env.TEAMUP_DEBUG) {
-    await page.screenshot({ path: `teamup-debug-${startStr}.png`, fullPage: true });
-    fs.writeFileSync(`teamup-debug-${startStr}.html`, await page.content());
-    console.log(`Debug files saved for ${startStr}`);
-  }
-
   const debug = !!process.env.TEAMUP_DEBUG;
+  const raw: RawScraped[] = [];
 
-  const raw = await page.evaluate((debug: boolean) => {
+  // The schedule page renders one week per load, so fetch two consecutive
+  // week windows to cover the full 14-day lookahead
+  for (const offset of [0, 7]) {
+    const startD = new Date(today);
+    startD.setDate(today.getDate() + offset);
+    const endD = new Date(startD);
+    endD.setDate(startD.getDate() + 6);
+    const startStr = toLocalDateString(startD);
+    const endStr = toLocalDateString(endD);
+
+    const url = `${SCHEDULE_BASE}?startdate=${startStr}&enddate=${endStr}&date=${startStr}`;
+    await page.goto(url, { waitUntil: "domcontentloaded" });
+    await page.waitForLoadState("networkidle");
+
+    // Wait for schedule items to appear
+    await page
+      .waitForSelector(".schedule-event-container", { timeout: 10000 })
+      .catch(() => {});
+
+    if (debug) {
+      await page.screenshot({ path: `teamup-debug-${startStr}.png`, fullPage: true });
+      fs.writeFileSync(`teamup-debug-${startStr}.html`, await page.content());
+      console.log(`Debug files saved for ${startStr}`);
+    }
+
+    raw.push(...(await scrapeVisibleSessions(page, debug)));
+  }
+  return finishSessions(raw, debug);
+}
+
+type RawScraped = {
+  name: string;
+  date: string;
+  startTime: string;
+  datetimeRaw: string;
+  spotsText: string;
+  bookingHref: string | null;
+  sampleHtml: string | null;
+};
+
+function scrapeVisibleSessions(page: Page, debug: boolean): Promise<RawScraped[]> {
+  return page.evaluate((debug: boolean) => {
     // tsx/esbuild's keepNames option wraps named const functions (e.g. `get` below)
     // in calls to a `__name` helper. That helper isn't defined in the page context
     // when this function is serialized for page.evaluate, so polyfill it here.
@@ -169,7 +190,9 @@ export async function getAllSessions(page: Page): Promise<GymSession[]> {
       return [{ name, date: datePart, startTime, datetimeRaw, spotsText, bookingHref, sampleHtml }];
     });
   }, debug);
+}
 
+function finishSessions(raw: RawScraped[], debug: boolean): GymSession[] {
   const sessions: GymSession[] = raw.map((s) => ({
     name: s.name,
     date: s.date,
