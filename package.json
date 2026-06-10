@@ -5,7 +5,8 @@
   "scripts": {
     "calendar": "tsx src/get-calendar-slots.ts",
     "appointments": "tsx src/create-appointments.ts",
-    "teamup": "tsx src/create-teamup-appointments.ts"
+    "teamup": "tsx src/create-teamup-appointments.ts",
+    "cleanup": "tsx src/cleanup-appointments.ts"
   },
   "dependencies": {
     "googleapis": "^172.0.0",

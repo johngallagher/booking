@@ -72,6 +72,24 @@ async function main() {
   const calendarId = exerciseCalendarId;
   const existingEvents = await getExistingIndoorTennisEvents(calendar, calendarId, 7);
 
+  // Declined invites become tombstones: drop the attendee so the event leaves
+  // King's calendar, but keep it here so the slot isn't re-invited next run
+  for (const event of existingEvents) {
+    const declined = event.attendees?.some(
+      (a) => a.email === KING_ACCOUNT && a.responseStatus === "declined"
+    );
+    if (declined && !event.description?.startsWith("DECLINED")) {
+      await withRetry(() => calendar.events.patch({
+        calendarId,
+        eventId: event.id!,
+        sendUpdates: "none",
+        requestBody: { attendees: [], description: `DECLINED\n${event.description ?? ""}` },
+      }));
+      await sleep(500);
+      console.log(`Declined: ${event.start?.dateTime} (invite removed)`);
+    }
+  }
+
   // Delete events that are no longer in the available courts list (skip already-booked ones)
   let deleted = 0;
   for (const event of existingEvents) {

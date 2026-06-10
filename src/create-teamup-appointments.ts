@@ -66,6 +66,21 @@ function conflictsWithBusy(
   return busyPeriods.some((b) => start < b.end && end > b.start);
 }
 
+// ── Invite response handling ──────────────────────────────────────────────────
+
+function kingResponse(event: calendar_v3.Schema$Event): string | undefined {
+  return event.attendees?.find((a) => a.email === KING_ACCOUNT)?.responseStatus ?? undefined;
+}
+
+function isDeclinedTombstone(event: calendar_v3.Schema$Event): boolean {
+  return !!event.description?.startsWith("DECLINED");
+}
+
+function nextDay(date: string): string {
+  const [y, m, d] = date.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
+}
+
 // ── Calendar helpers ──────────────────────────────────────────────────────────
 
 function sessionMatchesEvent(session: GymSession, event: calendar_v3.Schema$Event): boolean {
@@ -169,13 +184,48 @@ async function main() {
   console.log(`${sessions.length} session(s) after conflict check`);
   const existingEvents = await getExistingGymEvents(calKing, calendarId, 7);
 
-  // Delete stale gym events (no longer available, out of window, or now conflicting)
+  // Declined invites become tombstones: drop the attendee so the event leaves
+  // King's calendar, but keep it here so the session isn't re-invited next run
+  for (const event of existingEvents) {
+    if (kingResponse(event) === "declined") {
+      await withRetry(() => calKing.events.patch({
+        calendarId,
+        eventId: event.id!,
+        sendUpdates: "none",
+        requestBody: { attendees: [], description: "DECLINED" },
+      }));
+      event.attendees = [];
+      event.description = "DECLINED";
+      await sleep(500);
+      console.log(`Declined: ${event.summary} @ ${event.start?.dateTime} (invite removed)`);
+    }
+  }
+
+  // Rest days: an accepted session blocks other invites that day and the next
+  const restDates = new Set<string>();
+  for (const event of existingEvents) {
+    if (kingResponse(event) === "accepted") {
+      const date = event.start?.dateTime?.slice(0, 10);
+      if (date) {
+        restDates.add(date);
+        restDates.add(nextDay(date));
+      }
+    }
+  }
+
+  // Delete stale gym events (no longer available, out of window, now
+  // conflicting, or falling on a rest day). Accepted sessions are never
+  // deleted; declined tombstones stay while the session is still offered.
   let deleted = 0;
   for (const event of existingEvents) {
-    if (!sessions.some((s) => sessionMatchesEvent(s, event))) {
+    if (kingResponse(event) === "accepted") continue;
+    const stale = !sessions.some((s) => sessionMatchesEvent(s, event));
+    const onRestDay =
+      restDates.has(event.start?.dateTime?.slice(0, 10) ?? "") && !isDeclinedTombstone(event);
+    if (stale || onRestDay) {
       await withRetry(() => calKing.events.delete({ calendarId, eventId: event.id!, sendUpdates: "none" }));
       await sleep(500);
-      console.log(`Deleted: ${event.summary} @ ${event.start?.dateTime}`);
+      console.log(`Deleted: ${event.summary} @ ${event.start?.dateTime}${!stale && onRestDay ? " (rest day)" : ""}`);
       deleted++;
     }
   }
@@ -183,7 +233,12 @@ async function main() {
   // Create events for sessions not already in the calendar
   let created = 0;
   let skipped = 0;
+  let rested = 0;
   for (const session of sessions) {
+    if (restDates.has(session.date)) {
+      rested++;
+      continue;
+    }
     if (existingEvents.some((event) => sessionMatchesEvent(session, event))) {
       skipped++;
       continue;
@@ -194,7 +249,7 @@ async function main() {
     created++;
   }
 
-  console.log(`\nDone: ${created} created, ${skipped} already existed, ${deleted} deleted`);
+  console.log(`\nDone: ${created} created, ${skipped} already existed, ${rested} skipped (rest day), ${deleted} deleted`);
 }
 
 if (require.main === module) {
