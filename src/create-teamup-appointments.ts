@@ -172,7 +172,7 @@ async function main() {
   const { exerciseId: calendarId, otherItems } = await getCalendars(calKing);
 
   const lookahead = new Date(now);
-  lookahead.setDate(now.getDate() + 7);
+  lookahead.setDate(now.getDate() + 14);
 
   const busyPeriods = await getBusyPeriods(calKing, otherItems, now, lookahead);
   const sessions = windowed.filter((s) => {
@@ -183,7 +183,7 @@ async function main() {
     return true;
   });
   console.log(`${sessions.length} session(s) after conflict check`);
-  const existingEvents = await getExistingGymEvents(calKing, calendarId, 7);
+  const existingEvents = await getExistingGymEvents(calKing, calendarId, 14);
 
   // Declined invites become tombstones: drop the attendee so the event leaves
   // King's calendar, but keep it here so the session isn't re-invited next run
