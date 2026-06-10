@@ -91,15 +91,17 @@ export async function getAllSessions(page: Page): Promise<GymSession[]> {
   const debug = !!process.env.TEAMUP_DEBUG;
   const raw: RawScraped[] = [];
 
-  // The week view collapses multiple sessions sharing the same time slot down
-  // to a single card (e.g. BOX-TEC and SGPT both at 7am only show SGPT), so
-  // fetch each day individually via the day view, which renders every session.
-  for (let offset = 0; offset < 14; offset++) {
-    const d = new Date(today);
-    d.setDate(today.getDate() + offset);
-    const dateStr = toLocalDateString(d);
+  // The schedule page renders one week per load, so fetch two consecutive
+  // week windows to cover the full 14-day lookahead
+  for (const offset of [0, 7]) {
+    const startD = new Date(today);
+    startD.setDate(today.getDate() + offset);
+    const endD = new Date(startD);
+    endD.setDate(startD.getDate() + 6);
+    const startStr = toLocalDateString(startD);
+    const endStr = toLocalDateString(endD);
 
-    const url = scheduleUrlForDate(dateStr);
+    const url = `${SCHEDULE_BASE}?startdate=${startStr}&enddate=${endStr}&date=${startStr}`;
     await page.goto(url, { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle");
 
@@ -109,9 +111,16 @@ export async function getAllSessions(page: Page): Promise<GymSession[]> {
       .catch(() => {});
 
     if (debug) {
-      await page.screenshot({ path: `teamup-debug-${dateStr}.png`, fullPage: true });
-      fs.writeFileSync(`teamup-debug-${dateStr}.html`, await page.content());
-      console.log(`Debug files saved for ${dateStr}`);
+      await page.screenshot({ path: `teamup-debug-${startStr}.png`, fullPage: true });
+      fs.writeFileSync(`teamup-debug-${startStr}.html`, await page.content());
+      console.log(`Debug files saved for ${startStr}`);
+
+      if (offset === 0) {
+        console.log("\n── DEBUG: all containers (incl. unmatched) ──");
+        for (const line of await dumpContainers(page)) {
+          console.log(line);
+        }
+      }
     }
 
     raw.push(...(await scrapeVisibleSessions(page, debug)));
@@ -128,6 +137,41 @@ type RawScraped = {
   bookingHref: string | null;
   sampleHtml: string | null;
 };
+
+// Debug helper: dumps every .schedule-event-container, including ones that
+// don't end up matched to a <time> header (and are silently dropped by
+// scrapeVisibleSessions), so we can see what's being missed and why.
+function dumpContainers(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    (globalThis as Record<string, unknown>).__name ??= (fn: unknown) => fn;
+
+    const containers = Array.from(document.querySelectorAll(".schedule-event-container")) as HTMLElement[];
+    const timeEls = Array.from(document.querySelectorAll("time[datetime]")).filter(
+      (t) => !t.closest(".schedule-event-container")
+    ) as HTMLElement[];
+
+    return containers.map((container, i) => {
+      const r = container.getBoundingClientRect();
+      const names = Array.from(container.querySelectorAll(".eventitem-name h6, h6.title")).map((h) =>
+        (h.textContent ?? "").replace(/<!---->/g, "").trim()
+      );
+
+      let bestTop = -Infinity;
+      let matched: string | null = null;
+      for (const t of timeEls) {
+        const tr = t.getBoundingClientRect();
+        const sameColumn = tr.left < r.right && tr.right > r.left;
+        if (sameColumn && tr.top <= r.top + 1 && tr.top > bestTop) {
+          bestTop = tr.top;
+          matched = t.getAttribute("datetime");
+        }
+      }
+
+      const rect = `top:${Math.round(r.top)},left:${Math.round(r.left)},w:${Math.round(r.width)},h:${Math.round(r.height)}`;
+      return `[${i}] names=${JSON.stringify(names)} rect={${rect}} matchedTime=${matched ?? "none"}`;
+    });
+  });
+}
 
 function scrapeVisibleSessions(page: Page, debug: boolean): Promise<RawScraped[]> {
   return page.evaluate((debug: boolean) => {
