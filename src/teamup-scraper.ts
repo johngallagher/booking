@@ -138,7 +138,13 @@ function scrapeVisibleSessions(page: Page, debug: boolean): Promise<RawScraped[]
     // when this function is serialized for page.evaluate, so polyfill it here.
     (globalThis as Record<string, unknown>).__name ??= (fn: unknown) => fn;
 
-    const containers = Array.from(document.querySelectorAll(".schedule-event-container"));
+    const containers = Array.from(document.querySelectorAll(".schedule-event-container")) as HTMLElement[];
+
+    // Slot-header <time> elements live alongside (not inside) event containers —
+    // exclude <time> elements nested within a container (e.g. "Registration closed" times).
+    const timeEls = Array.from(document.querySelectorAll("time[datetime]")).filter(
+      (t) => !t.closest(".schedule-event-container")
+    ) as HTMLElement[];
 
     // TeamUp's <time datetime="..."> values are in UTC; convert to Europe/London
     // local time so displayed times match what the site shows the user.
@@ -153,11 +159,20 @@ function scrapeVisibleSessions(page: Page, debug: boolean): Promise<RawScraped[]
     });
 
     return containers.flatMap((container) => {
-      // Multiple sessions can share one <time> header — walk back to find the
-      // nearest preceding <time> sibling rather than assuming it's the direct one
-      let timeEl = container.previousElementSibling as HTMLElement | null;
-      while (timeEl && timeEl.tagName !== "TIME") {
-        timeEl = timeEl.previousElementSibling as HTMLElement | null;
+      // Multiple sessions can share one <time> header, and DOM order doesn't always
+      // match visual order in the schedule's grid layout — so find the nearest <time>
+      // header positioned at or above this container in the same column, by geometry
+      // rather than by walking previousElementSibling.
+      const containerRect = container.getBoundingClientRect();
+      let timeEl: HTMLElement | null = null;
+      let bestTop = -Infinity;
+      for (const t of timeEls) {
+        const r = t.getBoundingClientRect();
+        const sameColumn = r.left < containerRect.right && r.right > containerRect.left;
+        if (sameColumn && r.top <= containerRect.top + 1 && r.top > bestTop) {
+          bestTop = r.top;
+          timeEl = t;
+        }
       }
       if (!timeEl) return [];
 

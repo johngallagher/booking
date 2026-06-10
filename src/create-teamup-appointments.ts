@@ -183,6 +183,9 @@ async function main() {
     return true;
   });
   console.log(`${sessions.length} session(s) after conflict check`);
+  for (const s of sessions) {
+    console.log(`  - ${eventSummary(s)} @ ${s.date} ${s.startTime}–${s.endTime} (${s.spotsAvailable} spot(s))`);
+  }
   const existingEvents = await getExistingGymEvents(calKing, calendarId, 14);
 
   // Declined invites become tombstones: drop the attendee so the event leaves
@@ -210,6 +213,7 @@ async function main() {
       if (date) {
         restDates.add(date);
         restDates.add(nextDay(date));
+        console.log(`Rest day: ${date} and ${nextDay(date)} (accepted ${event.summary} @ ${event.start?.dateTime})`);
       }
     }
   }
@@ -237,10 +241,12 @@ async function main() {
   let rested = 0;
   for (const session of sessions) {
     if (restDates.has(session.date)) {
+      console.log(`Rested: ${eventSummary(session)} @ ${session.date} ${session.startTime}–${session.endTime}`);
       rested++;
       continue;
     }
     if (existingEvents.some((event) => sessionMatchesEvent(session, event))) {
+      console.log(`Already exists: ${eventSummary(session)} @ ${session.date} ${session.startTime}–${session.endTime}`);
       skipped++;
       continue;
     }
