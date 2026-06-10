@@ -14,6 +14,12 @@ export interface GymSession {
   bookingUrl?: string;
 }
 
+// Schedule UI link showing just the given day (the page supports day-level
+// navigation via query params, but not scrolling to a specific time)
+export function scheduleUrlForDate(date: string): string {
+  return `${SCHEDULE_BASE}?startdate=${date}&enddate=${date}&date=${date}`;
+}
+
 function allowedSessions(): string[] {
   const { activeMembership, memberships } = gymSchedule;
   if (activeMembership === "sgpt") {
