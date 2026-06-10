@@ -69,7 +69,12 @@ function conflictsWithBusy(
 // ── Calendar helpers ──────────────────────────────────────────────────────────
 
 function sessionMatchesEvent(session: GymSession, event: calendar_v3.Schema$Event): boolean {
-  return !!event.start?.dateTime?.startsWith(`${session.date}T${session.startTime}`);
+  // Match on name as well as start time so two different classes running in
+  // the same slot (e.g. BOX-TEC and Smash HIIT) are treated as distinct events
+  return (
+    event.summary === eventSummary(session) &&
+    !!event.start?.dateTime?.startsWith(`${session.date}T${session.startTime}`)
+  );
 }
 
 function eventSummary(session: GymSession): string {
@@ -116,6 +121,7 @@ async function createGymEvent(
     sendUpdates: "none",
     requestBody: {
       summary: eventSummary(session),
+      attendees: [{ email: KING_ACCOUNT }],
       start: { dateTime: `${session.date}T${session.startTime}:00`, timeZone: "Europe/London" },
       end: { dateTime: `${session.date}T${session.endTime}:00`, timeZone: "Europe/London" },
       status: "tentative",
