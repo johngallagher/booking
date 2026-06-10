@@ -114,13 +114,6 @@ export async function getAllSessions(page: Page): Promise<GymSession[]> {
       await page.screenshot({ path: `teamup-debug-${startStr}.png`, fullPage: true });
       fs.writeFileSync(`teamup-debug-${startStr}.html`, await page.content());
       console.log(`Debug files saved for ${startStr}`);
-
-      if (offset === 0) {
-        console.log("\n── DEBUG: all containers (incl. unmatched) ──");
-        for (const line of await dumpContainers(page)) {
-          console.log(line);
-        }
-      }
     }
 
     raw.push(...(await scrapeVisibleSessions(page, debug)));
@@ -137,41 +130,6 @@ type RawScraped = {
   bookingHref: string | null;
   sampleHtml: string | null;
 };
-
-// Debug helper: dumps every .schedule-event-container, including ones that
-// don't end up matched to a <time> header (and are silently dropped by
-// scrapeVisibleSessions), so we can see what's being missed and why.
-function dumpContainers(page: Page): Promise<string[]> {
-  return page.evaluate(() => {
-    (globalThis as Record<string, unknown>).__name ??= (fn: unknown) => fn;
-
-    const containers = Array.from(document.querySelectorAll(".schedule-event-container")) as HTMLElement[];
-    const timeEls = Array.from(document.querySelectorAll("time[datetime]")).filter(
-      (t) => !t.closest(".schedule-event-container")
-    ) as HTMLElement[];
-
-    return containers.map((container, i) => {
-      const r = container.getBoundingClientRect();
-      const names = Array.from(container.querySelectorAll(".eventitem-name h6, h6.title")).map((h) =>
-        (h.textContent ?? "").replace(/<!---->/g, "").trim()
-      );
-
-      let bestTop = -Infinity;
-      let matched: string | null = null;
-      for (const t of timeEls) {
-        const tr = t.getBoundingClientRect();
-        const sameColumn = tr.left < r.right && tr.right > r.left;
-        if (sameColumn && tr.top <= r.top + 1 && tr.top > bestTop) {
-          bestTop = tr.top;
-          matched = t.getAttribute("datetime");
-        }
-      }
-
-      const rect = `top:${Math.round(r.top)},left:${Math.round(r.left)},w:${Math.round(r.width)},h:${Math.round(r.height)}`;
-      return `[${i}] names=${JSON.stringify(names)} rect={${rect}} matchedTime=${matched ?? "none"}`;
-    });
-  });
-}
 
 function scrapeVisibleSessions(page: Page, debug: boolean): Promise<RawScraped[]> {
   return page.evaluate((debug: boolean) => {
@@ -227,24 +185,32 @@ function scrapeVisibleSessions(page: Page, debug: boolean): Promise<RawScraped[]
       const datePart = `${get("year")}-${get("month")}-${get("day")}`;
       const startTime = `${get("hour")}:${get("minute")}`; // "08:00" in Europe/London
 
-      const titleEl = container.querySelector(".eventitem-name h6, h6.title");
-      const name = (titleEl?.textContent ?? "").replace(/<!---->/g, "").trim();
-      if (!name) return [];
+      // A single container can stack multiple events sharing the same time
+      // slot (e.g. BOX-TEC and SGPT both at 7am), each as its own
+      // .calendar-event card — process every one, not just the first.
+      const eventEls = Array.from(container.querySelectorAll(".calendar-event"));
+      const items = eventEls.length > 0 ? eventEls : [container];
 
-      // Spots: icon class is i-fas-user (available) or i-fas-users (full)
-      const spotsEl = container.querySelector(".i-fas-user, .i-fas-users")?.closest("p");
-      const spotsText = (spotsEl?.textContent ?? "").trim();
+      return items.flatMap((item) => {
+        const titleEl = item.querySelector(".eventitem-name h6, h6.title");
+        const name = (titleEl?.textContent ?? "").replace(/<!---->/g, "").trim();
+        if (!name) return [];
 
-      // Look for any link/element carrying a booking event id (e.g. href="...?e=12345" or data-* attrs)
-      let bookingHref: string | null = null;
-      let sampleHtml: string | null = null;
-      if (debug) {
-        const link = container.querySelector<HTMLAnchorElement>('a[href*="e="], a[href*="event"]');
-        bookingHref = link?.getAttribute("href") ?? null;
-        sampleHtml = container.outerHTML.slice(0, 4000);
-      }
+        // Spots: icon class is i-fas-user (available) or i-fas-users (full)
+        const spotsEl = item.querySelector(".i-fas-user, .i-fas-users")?.closest("p");
+        const spotsText = (spotsEl?.textContent ?? "").trim();
 
-      return [{ name, date: datePart, startTime, datetimeRaw, spotsText, bookingHref, sampleHtml }];
+        // Look for any link/element carrying a booking event id (e.g. href="...?e=12345" or data-* attrs)
+        let bookingHref: string | null = null;
+        let sampleHtml: string | null = null;
+        if (debug) {
+          const link = item.querySelector<HTMLAnchorElement>('a[href*="e="], a[href*="event"]');
+          bookingHref = link?.getAttribute("href") ?? null;
+          sampleHtml = item.outerHTML.slice(0, 4000);
+        }
+
+        return [{ name, date: datePart, startTime, datetimeRaw, spotsText, bookingHref, sampleHtml }];
+      });
     });
   }, debug);
 }
