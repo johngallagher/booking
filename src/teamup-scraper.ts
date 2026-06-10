@@ -91,17 +91,15 @@ export async function getAllSessions(page: Page): Promise<GymSession[]> {
   const debug = !!process.env.TEAMUP_DEBUG;
   const raw: RawScraped[] = [];
 
-  // The schedule page renders one week per load, so fetch two consecutive
-  // week windows to cover the full 14-day lookahead
-  for (const offset of [0, 7]) {
-    const startD = new Date(today);
-    startD.setDate(today.getDate() + offset);
-    const endD = new Date(startD);
-    endD.setDate(startD.getDate() + 6);
-    const startStr = toLocalDateString(startD);
-    const endStr = toLocalDateString(endD);
+  // The week view collapses multiple sessions sharing the same time slot down
+  // to a single card (e.g. BOX-TEC and SGPT both at 7am only show SGPT), so
+  // fetch each day individually via the day view, which renders every session.
+  for (let offset = 0; offset < 14; offset++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() + offset);
+    const dateStr = toLocalDateString(d);
 
-    const url = `${SCHEDULE_BASE}?startdate=${startStr}&enddate=${endStr}&date=${startStr}`;
+    const url = scheduleUrlForDate(dateStr);
     await page.goto(url, { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle");
 
@@ -111,9 +109,9 @@ export async function getAllSessions(page: Page): Promise<GymSession[]> {
       .catch(() => {});
 
     if (debug) {
-      await page.screenshot({ path: `teamup-debug-${startStr}.png`, fullPage: true });
-      fs.writeFileSync(`teamup-debug-${startStr}.html`, await page.content());
-      console.log(`Debug files saved for ${startStr}`);
+      await page.screenshot({ path: `teamup-debug-${dateStr}.png`, fullPage: true });
+      fs.writeFileSync(`teamup-debug-${dateStr}.html`, await page.content());
+      console.log(`Debug files saved for ${dateStr}`);
     }
 
     raw.push(...(await scrapeVisibleSessions(page, debug)));
