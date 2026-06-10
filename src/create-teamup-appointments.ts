@@ -3,7 +3,7 @@ import type { calendar_v3 } from "googleapis";
 import { chromium } from "playwright";
 import { authorize } from "./get-calendar-slots";
 import { getAllSessions, type GymSession } from "./teamup-scraper";
-import { gymSchedule, exerciseCalendarId } from "./config";
+import { gymSchedule, exerciseCalendarId, workspaceUser } from "./config";
 import { withRetry, sleep } from "./calendar-retry";
 
 const KING_ACCOUNT = "kingofkerning@gmail.com";
@@ -151,7 +151,7 @@ async function main() {
   const windowed = allSessions.filter(isWithinSchedule);
   console.log(`${windowed.length} within schedule window (before ${gymSchedule.morningEndBy} or from ${gymSchedule.eveningStartFrom})`);
 
-  const authKing = await authorize(KING_ACCOUNT);
+  const authKing = await authorize(KING_ACCOUNT, workspaceUser);
   const calKing = google.calendar({ version: "v3", auth: authKing });
   const { exerciseId: calendarId, otherItems } = await getCalendars(calKing);
 
