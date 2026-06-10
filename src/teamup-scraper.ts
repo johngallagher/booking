@@ -116,9 +116,40 @@ export async function getAllSessions(page: Page): Promise<GymSession[]> {
       console.log(`Debug files saved for ${startStr}`);
     }
 
-    raw.push(...(await scrapeVisibleSessions(page, debug)));
+    const pageSessions = await scrapeVisibleSessions(page, debug);
+
+    // For sessions we'd actually create an event for, click through to the
+    // booking modal to capture its URL (which includes the `e=<id>` event
+    // id), so the calendar event can link straight to it.
+    for (const s of pageSessions) {
+      if (isAllowed(s.name) && parseSpots(s.spotsText) > 0) {
+        s.bookingUrl = await captureBookingUrl(page, s.scrapeIdx, debug);
+      }
+    }
+
+    raw.push(...pageSessions);
   }
   return finishSessions(raw, debug);
+}
+
+// Clicks a session's "Book" button to open its details modal, which TeamUp
+// reflects in the URL as an `e=<id>` query param, then closes the modal
+// without interacting with anything inside it (so nothing gets booked).
+async function captureBookingUrl(page: Page, scrapeIdx: number, debug: boolean): Promise<string | undefined> {
+  const button = page.locator(`[data-scrape-idx="${scrapeIdx}"] .cta button`).first();
+  try {
+    await button.scrollIntoViewIfNeeded({ timeout: 5000 });
+    await button.click({ timeout: 5000 });
+    await page.waitForURL((url: URL) => url.searchParams.has("e"), { timeout: 5000 });
+    const bookingUrl = page.url();
+    await page.keyboard.press("Escape");
+    await page.waitForURL((url: URL) => !url.searchParams.has("e"), { timeout: 2000 }).catch(() => {});
+    return bookingUrl;
+  } catch (err) {
+    if (debug) console.log(`Could not capture booking URL for item ${scrapeIdx}: ${err}`);
+    await page.keyboard.press("Escape").catch(() => {});
+    return undefined;
+  }
 }
 
 type RawScraped = {
@@ -127,6 +158,8 @@ type RawScraped = {
   startTime: string;
   datetimeRaw: string;
   spotsText: string;
+  scrapeIdx: number;
+  bookingUrl?: string;
   bookingHref: string | null;
   sampleHtml: string | null;
 };
@@ -157,6 +190,8 @@ function scrapeVisibleSessions(page: Page, debug: boolean): Promise<RawScraped[]
       minute: "2-digit",
       hourCycle: "h23",
     });
+
+    let scrapeIdx = 0;
 
     return containers.flatMap((container) => {
       // Multiple sessions can share one <time> header, and DOM order doesn't always
@@ -209,7 +244,10 @@ function scrapeVisibleSessions(page: Page, debug: boolean): Promise<RawScraped[]
           sampleHtml = item.outerHTML.slice(0, 4000);
         }
 
-        return [{ name, date: datePart, startTime, datetimeRaw, spotsText, bookingHref, sampleHtml }];
+        const idx = scrapeIdx++;
+        item.setAttribute("data-scrape-idx", String(idx));
+
+        return [{ name, date: datePart, startTime, datetimeRaw, spotsText, scrapeIdx: idx, bookingHref, sampleHtml }];
       });
     });
   }, debug);
@@ -222,6 +260,7 @@ function finishSessions(raw: RawScraped[], debug: boolean): GymSession[] {
     startTime: s.startTime,
     endTime: addHour(s.startTime),
     spotsAvailable: parseSpots(s.spotsText),
+    bookingUrl: s.bookingUrl,
   }));
 
   const before = sessions.length;

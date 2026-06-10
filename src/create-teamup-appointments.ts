@@ -136,7 +136,7 @@ async function createGymEvent(
     sendUpdates: "none",
     requestBody: {
       summary: eventSummary(session),
-      description: `Book now: ${scheduleUrlForDate(session.date)}`,
+      description: `Book now: ${session.bookingUrl ?? scheduleUrlForDate(session.date)}`,
       attendees: [{ email: KING_ACCOUNT }],
       start: { dateTime: `${session.date}T${session.startTime}:00`, timeZone: "Europe/London" },
       end: { dateTime: `${session.date}T${session.endTime}:00`, timeZone: "Europe/London" },
