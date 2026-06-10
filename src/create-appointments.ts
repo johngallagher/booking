@@ -48,6 +48,7 @@ async function createIndoorTennisEvent(
     sendUpdates: "none",
     requestBody: {
       summary: tennisSchedule.sessionName,
+      attendees: [{ email: KING_ACCOUNT }],
       description: `Booking URL: ${court.bookingUrl}\nPrice: ${court.price}`,
       start: { dateTime: `${court.date}T${court.startTime}:00`, timeZone: "Europe/London" },
       end: { dateTime: `${court.date}T${court.endTime}:00`, timeZone: "Europe/London" },
