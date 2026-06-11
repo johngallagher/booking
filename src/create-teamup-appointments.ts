@@ -10,8 +10,15 @@ const KING_ACCOUNT = "kingofkerning@gmail.com";
 
 // ── Time window filter ────────────────────────────────────────────────────────
 
+// "YYYY-MM-DD" denotes a London-local calendar date, and the day of week for
+// a calendar date doesn't depend on timezone, so parse as UTC.
+function isSaturday(date: string): boolean {
+  return new Date(`${date}T00:00:00Z`).getUTCDay() === 6;
+}
+
 function isWithinSchedule(session: GymSession): boolean {
   return (
+    isSaturday(session.date) ||
     session.endTime <= gymSchedule.morningEndBy ||
     session.startTime >= gymSchedule.eveningStartFrom
   );
@@ -169,7 +176,7 @@ async function main() {
   console.log(`${allSessions.length} session(s) from TeamUp`);
 
   const windowed = allSessions.filter(isWithinSchedule);
-  console.log(`${windowed.length} within schedule window (before ${gymSchedule.morningEndBy} or from ${gymSchedule.eveningStartFrom})`);
+  console.log(`${windowed.length} within schedule window (before ${gymSchedule.morningEndBy} or from ${gymSchedule.eveningStartFrom}, or any time on Saturday)`);
 
   const authKing = await authorize(KING_ACCOUNT, workspaceUser);
   const calKing = google.calendar({ version: "v3", auth: authKing });
